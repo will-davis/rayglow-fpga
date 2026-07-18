@@ -1,0 +1,17 @@
+[project]
+name = "rayglow-fpga"
+version = "0.1.0"
+description = "ECP5 gateware: Pi 5 DPI in, HUB75 BCM scan-out to the rayglow LED wall"
+requires-python = ">=3.13"
+dependencies = [
+    "amaranth>=0.5.9",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
