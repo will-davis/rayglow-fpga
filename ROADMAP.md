@@ -22,14 +22,16 @@ Concepts: LUT/FF/EBR/PLL, constraints, timing reports, the build pipeline.
 
 - [x] OSS CAD Suite (2026-07-18 nightly) → `~/opt/oss-cad-suite`, PATH appended via
       `fish_add_path` (yosys 0.67, nextpnr-ecp5 0.10, ecppack 1.4, openFPGALoader 1.1.1)
-- [ ] udev rule for the FT2232H (0403:6010, `TAG+="uaccess"`) — needs sudo
+- [x] udev rule for the FT2232H (0403:6010, `TAG+="uaccess"`) — `/etc/udev/rules.d/99-ecp5-evn.rules`
 - [x] `uv run python -m gateware.top_blinky` builds: 25 FF / 32 comb of 83,640 (0 %),
       Fmax 589 MHz against the 12 MHz constraint. Artifacts worth reading in `build/`:
       `top.debug.v` (the Verilog Amaranth generated), `top.lpf`, `top.tim`
-- [ ] `openFPGALoader --detect` sees the board; SRAM-load blinks LED0 (12 MHz clock:
-      USB plugged + JP2 installed, JP1 off)
-- [ ] Button → LED; DIP switches read; then PLL from the X2 200 MHz oscillator (JP9 open,
-      verify VCCIO/IO_TYPE for Y19/W20) — the standalone clock all later phases use
+- [x] `openFPGALoader --detect` → LFE5UM5G-85 (0x81113043); SRAM-load blinks LED (D5) at
+      1.4 Hz, DONE (D4) green — confirmed on hardware 2026-07-18
+- [ ] Button → LED + DIP switches → LEDs (`top_phase0.py`, loaded — awaiting hands-on check)
+- [ ] PLL: multiply the 12 MHz FTDI clock via EHXPLLL (e.g. →60 MHz) — the learning
+      milestone. The X2 200 MHz path (Y19/W20, external 100 Ω term per Fig A.6) is only
+      needed for standalone/flash boot; its input-standard question deferred to Phase 4
 - [ ] Debug UART out PMOD J31 → Waveshare USB-UART bridge (FTDI UART path is DNI — R34/R35)
 - [ ] Skim: ECP5 sysMEM/EBR + EHXPLLL sections of the family datasheet (`.reference/ecp5/`)
 
@@ -101,6 +103,18 @@ stable for hours, no visible SI artifacts at viewing distance.
 - [ ] EVN mini-USB → Pi USB: reflash over SSH (`openFPGALoader` on the Pi)
 - [ ] Optional: 120 Hz DPI mode; temporal dithering; per-chain diagnostics counters
       readable over the debug UART/I²C
+
+## Phase 5 (future, promising) — audio DSP on-chip
+
+Will's idea (2026-07-18): mic → FPGA FFT, coexisting with the HUB75 role. Viable on this
+one chip — the 85F has 156 sysDSP multipliers and the translator barely dents the LUT
+budget; 48 kHz audio is glacial next to a 100 MHz butterfly engine. Architecture insight:
+the *consumer* of audio features is the Pi renderer, so the FPGA would act as an alternate
+**feed-v3 sender** — I2S MEMS mic on 3 GPIOs → window/FFT/band-fold in fabric → feature
+packets up the already-planned EVN-USB↔Pi cable (FT2232H channel B UART). Same packet
+contract, new producer; rayglow already treats senders as swappable. Sequenced after
+Phase 2-3 (needs the same EBR/CDC/fixed-point skills those phases teach). Bonus mode:
+standalone spectrum bars with no Pi at all — great bring-up diagnostic and demoscene flex.
 
 ## Parked / rejected (with reasons, so they stay decided)
 - **Ethernet ingest** (KSZ9031 stash, `.reference/ethernet-adapter/`): Pi stays regardless;

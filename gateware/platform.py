@@ -27,8 +27,18 @@ class ECP5EVNPlatform(LatticeECP5Platform):
             Resource("led", i, PinsN(pin, dir="o"), Attrs(IO_TYPE="LVCMOS33"))
             for i, pin in enumerate("A13 A12 B19 A18 B18 C17 A17 B17".split())
         ],
-        # UG Table 7.3: SW4, the general-purpose push button, drives low when pressed.
+        # UG Table 7.3: SW4, the general-purpose push button, drives low when pressed
+        # (schematic Fig A.9: 10k pull-up + 100nF, so it arrives debounced-ish).
         Resource("button", 0, PinsN("P4", dir="i"), Attrs(IO_TYPE="LVCMOS33")),
+        # UG Table 7.1 / schematic Fig A.10: SW5 eight-position DIP, 4.7k pull-ups,
+        # closed (ON) = grounded, hence PinsN. Switches 1-3 bank 6, 4-8 bank 1.
+        # NB Table 2.1 claims VCCIO1 defaults to 2.5 V but Fig A.11 shows the 0-ohm
+        # strap (R105) from +3.3 V populated — LVCMOS33 matches the schematic; meter
+        # VCCIO1 (TP27) if bank-1 IO ever misbehaves.
+        *[
+            Resource("switch", i, PinsN(pin, dir="i"), Attrs(IO_TYPE="LVCMOS33"))
+            for i, pin in enumerate("J1 H1 K1 E15 D16 B16 C16 A16".split())
+        ],
     ]
 
     connectors = []
