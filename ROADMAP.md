@@ -20,10 +20,14 @@ INTERFACE-CONTRACT.md.
 
 Concepts: LUT/FF/EBR/PLL, constraints, timing reports, the build pipeline.
 
-- [ ] OSS CAD Suite (yosys, nextpnr-ecp5, ecppack, openFPGALoader, waveform viewers) into
-      `~/opt/oss-cad-suite`, PATH via fish `fish_add_path`; udev rule for the FT2232H
-- [ ] `openFPGALoader --detect` sees the board; `uv run python -m gateware.top_blinky`
-      builds; SRAM-load blinks LED0 (12 MHz clock: USB plugged + JP2 installed, JP1 off)
+- [x] OSS CAD Suite (2026-07-18 nightly) → `~/opt/oss-cad-suite`, PATH appended via
+      `fish_add_path` (yosys 0.67, nextpnr-ecp5 0.10, ecppack 1.4, openFPGALoader 1.1.1)
+- [ ] udev rule for the FT2232H (0403:6010, `TAG+="uaccess"`) — needs sudo
+- [x] `uv run python -m gateware.top_blinky` builds: 25 FF / 32 comb of 83,640 (0 %),
+      Fmax 589 MHz against the 12 MHz constraint. Artifacts worth reading in `build/`:
+      `top.debug.v` (the Verilog Amaranth generated), `top.lpf`, `top.tim`
+- [ ] `openFPGALoader --detect` sees the board; SRAM-load blinks LED0 (12 MHz clock:
+      USB plugged + JP2 installed, JP1 off)
 - [ ] Button → LED; DIP switches read; then PLL from the X2 200 MHz oscillator (JP9 open,
       verify VCCIO/IO_TYPE for Y19/W20) — the standalone clock all later phases use
 - [ ] Debug UART out PMOD J31 → Waveshare USB-UART bridge (FTDI UART path is DNI — R34/R35)

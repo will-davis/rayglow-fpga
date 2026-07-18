@@ -49,7 +49,8 @@ rayglow's `ROADMAP.md` §5, `hardware/POWER-AND-GROUNDING.md`, and
   expansion: Versa J39 (~19) / J40 (~30). Signal plan: hardware/WING-BOARD.md.
 
 ## Current state
-ECP5 FPGA translation layer for the rayglow LED wall (Pi 5 DPI in → HUB75 out) — just
-scaffolded (2026-07-18). Plan + contract drafted; blinky + first sim in `gateware/`;
-toolchain not yet installed (ROADMAP Phase 0 next). Wall v2 meanwhile runs on the RP2350
-path at reduced clock.
+ECP5 FPGA translation layer for the rayglow LED wall (Pi 5 DPI in → HUB75 out) —
+scaffolded 2026-07-18. Plan + contract drafted; blinky sim green; **toolchain installed**
+(OSS CAD Suite in `~/opt`, on fish PATH) and the blinky bitstream builds. Phase 0
+remaining: udev rule (sudo), first board flash, button/UART/PLL milestones. Wall v2
+meanwhile runs on the RP2350 path at reduced clock.
