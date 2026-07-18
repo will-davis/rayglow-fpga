@@ -1,0 +1,10 @@
+# vendor datasheets/blobs — agent-readable, not repo history
+.reference/
+
+# build & scratch
+build/
+dist/
+*.bak
+__pycache__/
+.venv/
+target/
