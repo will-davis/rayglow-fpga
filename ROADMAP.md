@@ -34,10 +34,17 @@ Concepts: LUT/FF/EBR/PLL, constraints, timing reports, the build pipeline.
       `DomainRenamer` demo + multi-clock sim (`tests/test_domains.py`). Timing: both
       domains PASS (fast_clk Fmax 491 MHz vs 60 required). The X2 200 MHz path (Y19/W20,
       external 100 Ω term per Fig A.6) deferred to Phase 4 (standalone/flash boot only)
-- [ ] Debug UART out PMOD J31 → Waveshare USB-UART bridge (FTDI UART path is DNI — R34/R35)
+- [x] Debug UART on PMOD J31 — via the **Pico debugprobe** UART bridge instead of the
+      Waveshare (probe GP4→J31.2, GP5←J31.1, GND→J31.5; `/dev/ttyACM0` @ 115200).
+      Beacon + byte-perfect echo verified live 2026-07-19. Bring-up tools kept in
+      `gateware/`: `top_pmod_diag` (edge-latch pin finder), `top_wire_loop` (loopback)
 - [ ] Skim: ECP5 sysMEM/EBR + EHXPLLL sections of the family datasheet (`.reference/ecp5/`)
 
-**Accept:** blinky + button + UART hello, built and loaded from the desktop CLI only.
+**Accept: MET 2026-07-19** — blinky + button + UART echo, built and loaded from the CLI.
+
+**Lesson learned:** SRAM configuration is volatile — any board power cycle blanks the
+FPGA (floating pins, dead console). After a power cycle: `openFPGALoader -b ecp5_evn
+build/top.bit`. Flash boot (Phase 4) exists for exactly this reason.
 
 ## Phase 1 — HUB75 core, one bench panel
 

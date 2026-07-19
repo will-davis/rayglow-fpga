@@ -42,15 +42,18 @@ rayglow's `ROADMAP.md` §5, `hardware/POWER-AND-GROUNDING.md`, and
   as RASP_ID_SD (L18) / RASP_ID_SC (L17) — needed: DPI PCLK is GPIO0, DE **must** be GPIO1.
 - Clocks (UG Table 4.1): 12 MHz FTDI (ball A10) — **only alive while USB plugged, JP2
   installed**; 200 MHz X2 (Y19/W20, JP9 open) is the standalone clock; X5 50 MHz DNI.
-- **UART-to-FTDI is NOT populated** (R34/R35 DNI, UG §6.2) — debug console goes out PMOD
-  J31 to the Waveshare USB-UART bridge instead. FTDI I²C to bank 0 *is* wired.
+- **UART-to-FTDI is NOT populated** (R34/R35 DNI, UG §6.2) — the debug console is PMOD
+  J31 ↔ **Pico debugprobe** UART bridge (probe GP4→J31.2/C7, GP5←J31.1/C6, GND→J31.5;
+  `/dev/ttyACM0` @ 115200). FTDI I²C to bank 0 *is* wired.
+- **SRAM config is volatile** — after any power cycle, reload the bitstream before
+  trusting any test result (a blank FPGA floats its pins and looks like broken wiring).
 - 8 LEDs bank 1 active-low (Table 7.4); SW4 = user button P4 active-low (Table 7.3).
 - HUB75 out: J32 (18 GPIO) + J33 (14 GPIO), both bank 7 / VCCIO7 = 3.3 V (JP11 default);
   expansion: Versa J39 (~19) / J40 (~30). Signal plan: hardware/WING-BOARD.md.
 
 ## Current state
-ECP5 FPGA translation layer for the rayglow LED wall (Pi 5 DPI in → HUB75 out) —
-scaffolded 2026-07-18. Plan + contract drafted; blinky sim green; **toolchain installed**
-(OSS CAD Suite in `~/opt`, on fish PATH) and the blinky bitstream builds. Phase 0
-remaining: udev rule (sudo), first board flash, button/UART/PLL milestones. Wall v2
-meanwhile runs on the RP2350 path at reduced clock.
+ECP5 FPGA translation layer for the rayglow LED wall (Pi 5 DPI in → HUB75 out).
+**Phase 0 complete 2026-07-19**: toolchain (OSS CAD Suite in `~/opt`), blinky, button/DIP,
+PLL 12→60 MHz two-domain design, UART echo console via Pico debugprobe — all verified on
+hardware, all sims green. Next: **Phase 1** — the HUB75 BCM scan-out engine, sim-first,
+then first light on a retired P6 bench panel (wall v2 stays on the RP2350 path meanwhile).
