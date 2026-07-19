@@ -28,10 +28,12 @@ Concepts: LUT/FF/EBR/PLL, constraints, timing reports, the build pipeline.
       `top.debug.v` (the Verilog Amaranth generated), `top.lpf`, `top.tim`
 - [x] `openFPGALoader --detect` → LFE5UM5G-85 (0x81113043); SRAM-load blinks LED (D5) at
       1.4 Hz, DONE (D4) green — confirmed on hardware 2026-07-18
-- [ ] Button → LED + DIP switches → LEDs (`top_phase0.py`, loaded — awaiting hands-on check)
-- [ ] PLL: multiply the 12 MHz FTDI clock via EHXPLLL (e.g. →60 MHz) — the learning
-      milestone. The X2 200 MHz path (Y19/W20, external 100 Ω term per Fig A.6) is only
-      needed for standalone/flash boot; its input-standard question deferred to Phase 4
+- [x] Button → LED + DIP switches → LEDs (`top_phase0.py`) — confirmed on hardware
+- [x] PLL: 12 MHz × EHXPLLL → 60 MHz `fast` domain (`gateware/pll.py`, params from
+      `ecppll -i 12 -o 60`: VCO 600 MHz, CLKFB_DIV 5, CLKOP_DIV 10), lock-gated reset,
+      `DomainRenamer` demo + multi-clock sim (`tests/test_domains.py`). Timing: both
+      domains PASS (fast_clk Fmax 491 MHz vs 60 required). The X2 200 MHz path (Y19/W20,
+      external 100 Ω term per Fig A.6) deferred to Phase 4 (standalone/flash boot only)
 - [ ] Debug UART out PMOD J31 → Waveshare USB-UART bridge (FTDI UART path is DNI — R34/R35)
 - [ ] Skim: ECP5 sysMEM/EBR + EHXPLLL sections of the family datasheet (`.reference/ecp5/`)
 
