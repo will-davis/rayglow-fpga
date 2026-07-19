@@ -38,7 +38,7 @@ Concepts: LUT/FF/EBR/PLL, constraints, timing reports, the build pipeline.
       Waveshare (probe GP4→J31.2, GP5←J31.1, GND→J31.5; `/dev/ttyACM0` @ 115200).
       Beacon + byte-perfect echo verified live 2026-07-19. Bring-up tools kept in
       `gateware/`: `top_pmod_diag` (edge-latch pin finder), `top_wire_loop` (loopback)
-- [ ] Skim: ECP5 sysMEM/EBR + EHXPLLL sections of the family datasheet (`.reference/ecp5/`)
+- [x] Skim: ECP5 sysMEM/EBR + EHXPLLL sections of the family datasheet (Will, 2026-07-19)
 
 **Accept: MET 2026-07-19** — blinky + button + UART echo, built and loaded from the CLI.
 
@@ -52,17 +52,19 @@ The heart of the project. Bench mule = a **retired P6 panel** (`.reference/P6-..
 live wall and its RP2350 driver are never touched. Concepts: FSMs, dual-port EBR, CDC-free
 single-domain design, BCM timing, timing closure.
 
-- [ ] Scan-out engine in Amaranth, **parametric from day one**: chains N, panels/chain M,
-      scan 1/16, BCM depth B. Structure: row FSM (addr A–D, LAT) + shifter (RGB×N, CLK) +
-      BCM OE scheduler (binary-weighted intervals, hzeller-style)
-- [ ] Pytest sims: waveform-level assertions (LAT never during shift; OE intervals binary;
-      addr sequence) + a Python golden model that reconstructs the displayed image from
-      simulated pin wiggles and compares to the source pattern, `tools/verify.py`-style
-- [ ] EBR test-pattern ROM (gradients, checkerboard, single-pixel walk) → panel
-- [ ] First light **direct 3.3 V** (v1 precedent: clean over 4 panels), short ribbon,
-      ~10 MHz; then '245s on the EVN prototype area → 25 MHz
-- [ ] Gamma LUT (8-bit in → 12-bit BCM weights, CIE-ish) in EBR
-- [ ] Measure refresh vs the table above; PicoScope on OE/LAT (slow enough to see)
+- [x] Scan-out engine (`gateware/scanout.py`, 2026-07-19): parametric N/M/scan/B/U,
+      sequential v1 (shift→latch→display; overlap = recorded v2). Banked RGB888 EBR
+      framebuffer + CIE1931 gamma LUT at readout + plane bit-select. Bench build:
+      4 EBR, 91 FF, Fmax 172 MHz @ 12 MHz constraint
+- [x] Pytest sims (`tests/test_scanout.py`): golden model reconstructs the frame from
+      pin wiggles — per-pixel lit-time == U·lut[src] exact, 1- and 2-chain; structural
+      asserts (LAT only blanked, no shift-while-display); real-geometry row smoke
+- [x] EBR test pattern → bitstream (`top_hub75`: gradient + orientation corners, 64×32,
+      B=10, U=4 → 139 Hz @ 76 % duty in the 12 MHz domain; math in gateware/SCANOUT.md)
+- [ ] First light **direct 3.3 V** on a retired P6 panel (wiring table: SCANOUT.md),
+      6 MHz shift; then '245s on the EVN prototype area → faster clock/PLL domain
+- [x] Gamma LUT (8-bit → B-bit CIE1931) in the scan-out path
+- [ ] Measure refresh vs the table (PicoScope on OE/LAT — both well under 10 MHz)
 
 **Accept:** static + animated ROM patterns on the P6 panel at B≥8, measured refresh
 matching prediction ±10 %, all sims green.
