@@ -5,7 +5,7 @@ cited inline. Only Phase 0 resources are defined; the JP8 DPI ingest (Phase 2) a
 J32/J33 HUB75 outputs (Phase 3) land with their phases so every pin here is exercised.
 """
 
-from amaranth.build import Attrs, Clock, Pins, PinsN, Resource
+from amaranth.build import Attrs, Clock, Pins, PinsN, Resource, Subsignal
 from amaranth.vendor import LatticeECP5Platform
 
 
@@ -39,6 +39,15 @@ class ECP5EVNPlatform(LatticeECP5Platform):
             Resource("switch", i, PinsN(pin, dir="i"), Attrs(IO_TYPE="LVCMOS33"))
             for i, pin in enumerate("J1 H1 K1 E15 D16 B16 C16 A16".split())
         ],
+        # Debug console on PMOD J31 (UG Table 5.13, bank 0 @ 3.3 V): pin 1 = C6 = our TX,
+        # pin 2 = C7 = our RX, pin 5 = GND. Peer: Pico debugprobe UART (GP4=its TX, GP5=its RX).
+        Resource(
+            "uart",
+            0,
+            Subsignal("tx", Pins("C6", dir="o")),
+            Subsignal("rx", Pins("C7", dir="i")),
+            Attrs(IO_TYPE="LVCMOS33"),
+        ),
     ]
 
     connectors = []
