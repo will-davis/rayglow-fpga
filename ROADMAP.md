@@ -84,8 +84,13 @@ Concepts: clock-domain crossing, async handshakes, video timing.
 
 - [ ] Pi 5: `vc4-kms-dpi-generic` overlay, rgb888, modeline per INTERFACE-CONTRACT.md;
       verify PCLK/DE/sync on the scope before the FPGA ever sees them
-- [ ] DPI capture in the PCLK domain → double-buffered EBR framebuffer, swap on VSYNC;
-      scan-out reads the inactive buffer (tear-free, ≤1 frame latency)
+- [x] DPI timing decoder (`gateware/dpi.py`, `DpiIn`): DE/VSYNC → (x,y)/valid/frame_start
+      in the PCLK domain, modeline-agnostic, both sync polarities. Sim-verified over 2
+      frames (`tests/test_dpi.py`) — caught + fixed an active-low first-frame edge bug.
+- [ ] Framebuffer write path + double-buffer: DpiIn `valid` writes RGB888 into the
+      inactive EBR bank (Hub75Core's 2nd port), swap on `frame_start`; scan-out reads the
+      active bank. **This is the CDC step** (PCLK write domain ↔ scan-out read domain) —
+      swap handshake crosses with a 2-FF synchronizer + gray-coded bank select.
 - [ ] Milestone: **the panel shows the Pi's Linux console** — no rayglow code involved
 - [ ] Verify Pi 5 DPI color order (known quirk, raspberrypi/linux#6505); pin the swizzle
       in the contract
