@@ -63,12 +63,15 @@ single-domain design, BCM timing, timing closure.
       B=10, U=4 → 139 Hz @ 76 % duty in the 12 MHz domain; math in gateware/SCANOUT.md)
 - [x] **First light** on a retired P6 panel, direct 3.3 V, 6 MHz shift (2026-07-20):
       gradient + orientation corners correct, shift pixel-accurate, no flip/rotation.
-      Residual analog artifacts on the unbuffered/unterminated jumpers — top-left (the
-      darkest region) has a purple tint + washed-out white corner pixel, plus mild
-      color jitter. Suspects: SI/crosstalk on bare 3.3 V lines and short-LSB OE pulses
-      (U=4 → 333 ns LSB) rendering dark regions imprecisely. Next bullet addresses both.
-- [ ] '245 buffers on the EVN prototype area (drive strength + clean edges); scope OE/CLK
-      to characterize; re-check the top-left tint. Then faster clock / PLL domain
+      Root cause of the initial garble + tint was **flaky OE and GND solder joints**
+      (confirmed: touching wires snapped it into place) — NOT short-pulse nonlinearity
+      (that theory was a symptom of the bad OE/GND). `top_hub75_diag` (color bars + fade,
+      live unit A/B on SW5-1) built and kept as a bring-up tool.
+- [ ] **Redo the OE/GND solder joints** (the marginal ones), then buffer via the Adafruit
+      RGB Matrix HAT (5 V, pre-soldered) or '245s on the EVN proto area. Then scope OE/CLK
+      to measure refresh. Known residual to re-check after this: end-of-line skew on rows
+      14–19 (17 worst) — likely OE/SI; gateware fallback if it survives = blanking-guard
+      interval (SCANOUT.md v2). **Parked — physical-layer track, runs parallel to Phase 2.**
 - [x] Gamma LUT (8-bit → B-bit CIE1931) in the scan-out path
 - [ ] Measure refresh vs the table (PicoScope on OE/LAT — both well under 10 MHz)
 
