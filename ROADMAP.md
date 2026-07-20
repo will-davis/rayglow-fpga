@@ -61,8 +61,14 @@ single-domain design, BCM timing, timing closure.
       asserts (LAT only blanked, no shift-while-display); real-geometry row smoke
 - [x] EBR test pattern → bitstream (`top_hub75`: gradient + orientation corners, 64×32,
       B=10, U=4 → 139 Hz @ 76 % duty in the 12 MHz domain; math in gateware/SCANOUT.md)
-- [ ] First light **direct 3.3 V** on a retired P6 panel (wiring table: SCANOUT.md),
-      6 MHz shift; then '245s on the EVN prototype area → faster clock/PLL domain
+- [x] **First light** on a retired P6 panel, direct 3.3 V, 6 MHz shift (2026-07-20):
+      gradient + orientation corners correct, shift pixel-accurate, no flip/rotation.
+      Residual analog artifacts on the unbuffered/unterminated jumpers — top-left (the
+      darkest region) has a purple tint + washed-out white corner pixel, plus mild
+      color jitter. Suspects: SI/crosstalk on bare 3.3 V lines and short-LSB OE pulses
+      (U=4 → 333 ns LSB) rendering dark regions imprecisely. Next bullet addresses both.
+- [ ] '245 buffers on the EVN prototype area (drive strength + clean edges); scope OE/CLK
+      to characterize; re-check the top-left tint. Then faster clock / PLL domain
 - [x] Gamma LUT (8-bit → B-bit CIE1931) in the scan-out path
 - [ ] Measure refresh vs the table (PicoScope on OE/LAT — both well under 10 MHz)
 
