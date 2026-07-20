@@ -23,13 +23,14 @@ def channel(pix, ch):
     return (pix >> (16 - 8 * ch)) & 0xFF
 
 
-def run_frame_and_check(chains):
+def run_frame_and_check(chains, unit_drive=None):
     W, S, B, U = 8, 2, 3, 2
+    eff = unit_drive if unit_drive is not None else U
     imgs = [counting(W, 2 * S) for _ in range(chains)]
     for c, img in enumerate(imgs):          # make each chain's content distinct
         img[0][0] = (17 * (c + 1)) << 16
     dut = Hub75Core(
-        width=W, scan=S, chains=chains, planes=B, unit=U,
+        width=W, scan=S, chains=chains, planes=B, unit=U, unit_max=8,
         banks_init=[banks_from_image(img, W, S) for img in imgs], lut_init=LUT3,
     )
     sim = Simulator(dut)
@@ -38,6 +39,8 @@ def run_frame_and_check(chains):
     acc = [[[[0] * 3 for _ in range(W)] for _ in range(2 * S)] for _ in range(chains)]
 
     async def bench(ctx):
+        if unit_drive is not None:
+            ctx.set(dut.unit, unit_drive)
         row_shift = []
         latched = None
         prev_clk = 0
@@ -76,7 +79,7 @@ def run_frame_and_check(chains):
         for y in range(2 * S):
             for x in range(W):
                 for ch in range(3):
-                    expect = U * LUT3[channel(imgs[c][y][x], ch)]
+                    expect = eff * LUT3[channel(imgs[c][y][x], ch)]
                     got = acc[c][y][x][ch]
                     assert got == expect, (
                         f"chain {c} pixel ({x},{y}) ch{ch}: lit {got} cycles, expected {expect}"
@@ -89,6 +92,11 @@ def test_golden_frame_one_chain():
 
 def test_golden_frame_two_chains():
     run_frame_and_check(chains=2)
+
+
+def test_runtime_unit_scales_littime():
+    # Driving core.unit changes every pixel's on-time proportionally (the live A/B knob).
+    run_frame_and_check(chains=1, unit_drive=5)
 
 
 def test_real_geometry_one_row_smoke():

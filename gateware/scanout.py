@@ -29,16 +29,19 @@ from .patterns import cie1931_lut
 
 
 class Hub75Core(Elaboratable):
-    def __init__(self, *, width, scan=16, chains=1, planes=10, unit=4,
+    def __init__(self, *, width, scan=16, chains=1, planes=10, unit=4, unit_max=None,
                  banks_init=None, lut_init=None):
         self.width = width
         self.scan = scan
         self.chains = chains
         self.planes = planes
-        self.unit = unit
+        self._unit_max = unit_max if unit_max is not None else unit
         self.banks_init = banks_init or [[[], []] for _ in range(chains)]
         self.lut_init = lut_init or cie1931_lut(planes)
 
+        # LSB display time in clocks — the brightness/refresh knob (rayglow's OE_GAIN).
+        # Runtime input; undriven it holds `unit`, so fixed-unit tops/tests are unchanged.
+        self.unit = Signal(range(self._unit_max + 1), init=unit)
         self.clk = Signal()                  # panel shift clock
         self.lat = Signal()                  # row latch strobe
         self.blank = Signal(init=1)          # -> panel OE pin (active-low display)
@@ -48,7 +51,7 @@ class Hub75Core(Elaboratable):
 
     def elaborate(self, platform):
         m = Module()
-        W, S, N, B, U = self.width, self.scan, self.chains, self.planes, self.unit
+        W, S, N, B, UM = self.width, self.scan, self.chains, self.planes, self._unit_max
 
         plane = Signal(range(B))
         x_read = Signal(range(W))
@@ -79,7 +82,7 @@ class Hub75Core(Elaboratable):
 
         phase = Signal()                          # pixel slot half: 0=data, 1=CLK high
         xo = Signal(range(W))                     # output slot index
-        disp = Signal(range(U << (B - 1)))        # display countdown
+        disp = Signal(range(UM << (B - 1)))       # display countdown (sized for max unit)
 
         m.d.comb += self.blank.eq(1)              # blanked except in DISPLAY
         m.d.sync += self.frame.eq(0)
@@ -100,7 +103,7 @@ class Hub75Core(Elaboratable):
                         m.d.sync += xo.eq(xo + 1)
             with m.State("LATCH"):                # 1 cycle, row data -> output latches
                 m.d.comb += self.lat.eq(1)
-                m.d.sync += disp.eq((U << plane) - 1)
+                m.d.sync += disp.eq((self.unit << plane) - 1)
                 m.next = "DISPLAY"
             with m.State("DISPLAY"):              # un-blank for U * 2**plane cycles
                 m.d.comb += self.blank.eq(0)

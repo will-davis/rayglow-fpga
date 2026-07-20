@@ -36,6 +36,25 @@ def counting(width, height):
     ]
 
 
+def color_bars_fade(width, height):
+    """8 pure-hue vertical bars (crosstalk test: adjacent saturated channels) that fade
+    top=full to bottom=off (dark-region test: does each hue stay true as it dims?).
+    Bar order R G B C M Y W black — black is the leakage/ghost reference (should stay off).
+    """
+    hues = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (0, 255, 255),
+            (255, 0, 255), (255, 255, 0), (255, 255, 255), (0, 0, 0)]
+    bar = max(1, width // len(hues))
+    img = []
+    for y in range(height):
+        f = (height - 1 - y)
+        row = []
+        for x in range(width):
+            r, g, b = hues[min(x // bar, len(hues) - 1)]
+            row.append(rgb(r * f // (height - 1), g * f // (height - 1), b * f // (height - 1)))
+        img.append(row)
+    return img
+
+
 def banks_from_image(img, width, scan):
     """Split a (2*scan x width) image into [top_init, bottom_init] bank word lists."""
     assert len(img) == 2 * scan and all(len(row) == width for row in img), "image/geometry mismatch"
