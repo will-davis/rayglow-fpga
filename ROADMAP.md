@@ -87,10 +87,16 @@ Concepts: clock-domain crossing, async handshakes, video timing.
 - [x] DPI timing decoder (`gateware/dpi.py`, `DpiIn`): DE/VSYNC → (x,y)/valid/frame_start
       in the PCLK domain, modeline-agnostic, both sync polarities. Sim-verified over 2
       frames (`tests/test_dpi.py`) — caught + fixed an active-low first-frame edge bug.
-- [ ] Framebuffer write path + double-buffer: DpiIn `valid` writes RGB888 into the
-      inactive EBR bank (Hub75Core's 2nd port), swap on `frame_start`; scan-out reads the
-      active bank. **This is the CDC step** (PCLK write domain ↔ scan-out read domain) —
-      swap handshake crosses with a 2-FF synchronizer + gray-coded bank select.
+- [x] Framebuffer write path + double-buffer + **CDC** (`gateware/double_buffer.py`):
+      2 buffers, geometry fold on write (pix domain), front-select on read (sync domain);
+      one toggle bit crosses via FFSynchronizer, swap at scan frame boundary (tear-free);
+      strict buffer alternation keeps writer/reader disjoint. Hub75Core `external_fb`
+      hook. Full translator `gateware/translator.py` (`DpiToHub75`).
+- [x] Capstone sim (`tests/test_translator.py`): DPI video in `pix` → byte-exact panel
+      out in `sync`, across two clocks; caught a frame-split + a measurement-window bug.
+      13/13 sims green. JP8 pin map + PCLK-clock-routing risk recorded in the contract.
+- [ ] Board top `top_translator.py`: DPI in on JP8, HUB75 out on J32 — needs the modeline
+      live + the PCLK→clock-net decision (INTERFACE-CONTRACT §4a). Do at bring-up.
 - [ ] Milestone: **the panel shows the Pi's Linux console** — no rayglow code involved
 - [ ] Verify Pi 5 DPI color order (known quirk, raspberrypi/linux#6505); pin the swizzle
       in the contract

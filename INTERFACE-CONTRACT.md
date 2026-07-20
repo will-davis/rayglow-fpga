@@ -39,6 +39,33 @@ changes bump the version and are noted in both repos' status logs. Items marked
   within the strip.
 - Panel tile: P4-2121-64×32. Bench mule: P6-3528-64×32 (electrically equivalent HUB75).
 
+## 4a. JP8 pin map (ECP5 balls) — provisional, from UG Table 5.7
+
+DPI GPIO → Pi 40-pin → RASP signal → ECP5 ball (bank 3, 3.3 V, no series R):
+
+| DPI | GPIO | ball | | DPI | GPIO | ball | | DPI | GPIO | ball |
+|---|---|---|---|---|---|---|---|---|---|---|
+| **PCLK** | 0 | **L18** (ID_SD) | | D4 | 8 | U19 | | D14 | 18 | T16 |
+| **DE** | 1 | **L17** (ID_SC) | | D5 | 9 | T19 | | D15 | 19 | R17 |
+| VSYNC | 2 | T17 | | D6 | 10 | U20 | | D16 | 20 | P16 |
+| HSYNC | 3 | U16 | | D7 | 11 | R20 | | D17 | 21 | R16 |
+| D0 | 4 | U17 | | D8 | 12 | T20 | | D18 | 22 | N17 |
+| D1 | 5 | U18 | | D9 | 13 | P20 | | D19 | 23 | P17 |
+| D2 | 6 | T18 | | D10 | 14 | P18 | | D20 | 24 | M17 |
+| D3 | 7 | R18 | | D11 | 15 | N20 | | D21 | 25 | N18 |
+| | | | | D12 | 16 | P19 | | D22 | 26 | N16 |
+| | | | | D13 | 17 | N19 | | D23 | 27 | M18 |
+
+⚠ **Clock-routing risk to resolve at bring-up:** PCLK arrives on **L18, a general I/O**,
+not a dedicated GPLL/PCLK pin. The pixel domain must be clocked from it — verify nextpnr
+routes L18→a clock resource (may need `CLKI` from fabric, or a PLL fed by it, or the
+`ECPCLKDIV`/general-clock route). If routing/jitter is a problem, the fallback is to feed
+L18 into a PLL as reference. Confirm before trusting the DPI path.
+
+⚠ **Color order:** DPI `rgb888` line-to-color order (which of D0–D23 is R7..B0) is not yet
+confirmed on Pi 5 (raspberrypi/linux#6505). The gateware forms `pixel = {R,G,B}` via a
+named swizzle constant, resolved by eye at first console-on-panel and pinned here.
+
 ## 5. Out of scope (explicitly)
 - Audio/feature packets (UDP :5005) and the control plane (TCP :5006) terminate at the Pi
   renderer, exactly as today. The FPGA sees only video.
