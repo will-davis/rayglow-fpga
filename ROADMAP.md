@@ -9,8 +9,9 @@ INTERFACE-CONTRACT.md.
 | Quantity | Value | Notes |
 |---|---|---|
 | Wall | 384×128 = 49,152 px (6×4 tiles of 64×32, P4, 1/16 scan) | rayglow `config.py` |
-| Framebuffer | 1.13 Mbit @ 24 bpp; **2.25 Mbit double-buffered** | fits 3.74 Mbit EBR, ~60 % |
-| Future 512×128 | 3.0 Mbit double-buffered | still fits — no external RAM ever needed |
+| Framebuffer | 1.13 Mbit @ 24 bpp; **2.25 Mbit double-buffered** | fits 3.74 Mbit EBR |
+| FB in EBR **blocks** (empirical) | 9 DP16KD per 6144×24 true-dual-port bank × 16 banks = **144** + LUT ~12–24 ≈ **156–168 of 208 (75–81 %)** | measured 2026-07-20 (`synth_ecp5` on one bank); packing, not raw bits, is the real limit — and it fits |
+| Future 512×128 | ~3.0 Mbit; block-packed est. ~192 | TIGHT (≈92 %) but likely fits; re-measure before committing |
 | DPI pixel clock | ~3.5 MHz (416×140 total @ 60 Hz) | scope-visible (<10 MHz); 120 Hz = ~7 MHz |
 | Chain strip | 384×32, shift = 384 clk = 15.4 µs @ 25 MHz | vs 768-wide/30.7 µs today |
 | Refresh floor (shift-bound, conservative) | ≈ 1/(16 rows × B planes × t_shift): **B=8 → ~509 Hz, B=10 → ~407 Hz** | today: 143 Hz @ B=8; MSB planes exceed shift time so real numbers land higher |
@@ -106,6 +107,14 @@ Concepts: clock-domain crossing, async handshakes, video timing.
 
 **Accept:** a rayglow shader at 60 fps on bench panel(s) over DPI, no tearing, gamma per
 contract; RP2350 path still fully operational.
+
+### Notes for the Phase 3 wall build
+- **LUT replication scales with chains:** the gamma ROM has 3 read ports per chain-half
+  (24 at 4 chains). Cheap now (256×B), but if EBR gets tight, force it to LUTRAM/distributed
+  (`ram_style`) or time-multiplex — frees ~12–24 EBR.
+- **Full-wall `synth_ecp5` is slow** on the flattened design (stalls minutes in
+  MEMORY_LIBMAP with 16 wide dual-clock memories). Fine for a one-off bitstream build; if
+  it bites, synthesize per-chain or keep the framebuffer as a hierarchical black box.
 
 ## Phase 3 — Scale to the wall + wing boards
 
