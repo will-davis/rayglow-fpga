@@ -30,7 +30,7 @@ from .patterns import cie1931_lut
 
 class Hub75Core(Elaboratable):
     def __init__(self, *, width, scan=16, chains=1, planes=10, unit=4, unit_max=None,
-                 banks_init=None, lut_init=None):
+                 banks_init=None, lut_init=None, external_fb=False):
         self.width = width
         self.scan = scan
         self.chains = chains
@@ -38,10 +38,19 @@ class Hub75Core(Elaboratable):
         self._unit_max = unit_max if unit_max is not None else unit
         self.banks_init = banks_init or [[[], []] for _ in range(chains)]
         self.lut_init = lut_init or cie1931_lut(planes)
+        self.external_fb = external_fb
 
         # LSB display time in clocks — the brightness/refresh knob (rayglow's OE_GAIN).
         # Runtime input; undriven it holds `unit`, so fixed-unit tops/tests are unchanged.
         self.unit = Signal(range(self._unit_max + 1), init=unit)
+
+        # External framebuffer hook (Phase 2): shared read address out, per chain-half
+        # RGB888 data in (order [c0h0, c0h1, c1h0, ...]). All banks share one address
+        # because scan-out reads the same (addr, x) index from every bank each cycle.
+        if external_fb:
+            self.fb_addr = Signal(range(width * scan))
+            self.fb_data = [Signal(24, name=f"fb_data_{i}") for i in range(2 * chains)]
+
         self.clk = Signal()                  # panel shift clock
         self.lat = Signal()                  # row latch strobe
         self.blank = Signal(init=1)          # -> panel OE pin (active-low display)
@@ -55,24 +64,31 @@ class Hub75Core(Elaboratable):
 
         plane = Signal(range(B))
         x_read = Signal(range(W))
+        read_addr = Signal(range(W * S))
+        m.d.comb += read_addr.eq(self.addr * W + x_read)
 
-        # One EBR bank per (chain, half): raw RGB888, read at [addr*W + x].
-        fb_ports = []
-        for c in range(N):
-            for h in range(2):
-                mem = Memory(shape=24, depth=W * S, init=self.banks_init[c][h])
-                m.submodules[f"fb_{c}_{h}"] = mem
-                port = mem.read_port()
-                m.d.comb += [port.en.eq(1), port.addr.eq(self.addr * W + x_read)]
-                fb_ports.append(port)
+        # Framebuffer: raw RGB888 per (chain, half), read at [addr*W + x]. Either an
+        # internal ROM (default, banks_init) or driven externally (Phase 2 double buffer).
+        if self.external_fb:
+            m.d.comb += self.fb_addr.eq(read_addr)
+            fb_data_sigs = self.fb_data
+        else:
+            fb_data_sigs = []
+            for c in range(N):
+                for h in range(2):
+                    mem = Memory(shape=24, depth=W * S, init=self.banks_init[c][h])
+                    m.submodules[f"fb_{c}_{h}"] = mem
+                    port = mem.read_port()
+                    m.d.comb += [port.en.eq(1), port.addr.eq(read_addr)]
+                    fb_data_sigs.append(port.data)
 
         # Gamma ROM: one logical Memory, 3 read ports per bank (R,G,B); the
         # synthesizer replicates the underlying EBR to satisfy the port count.
         lut = Memory(shape=B, depth=256, init=self.lut_init)
         m.submodules.lut = lut
-        for i, fb in enumerate(fb_ports):
+        for i, data in enumerate(fb_data_sigs):
             half, chain = i % 2, i // 2
-            for ch, sl in enumerate([fb.data[16:24], fb.data[8:16], fb.data[0:8]]):
+            for ch, sl in enumerate([data[16:24], data[8:16], data[0:8]]):
                 port = lut.read_port()
                 m.d.comb += [
                     port.en.eq(1),
