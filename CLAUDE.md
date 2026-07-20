@@ -42,6 +42,11 @@ rayglow's `ROADMAP.md` §5, `hardware/POWER-AND-GROUNDING.md`, and
   as RASP_ID_SD (L18) / RASP_ID_SC (L17) — needed: DPI PCLK is GPIO0, DE **must** be GPIO1.
 - Clocks (UG Table 4.1): 12 MHz FTDI (ball A10) — **only alive while USB plugged, JP2
   installed**; 200 MHz X2 (Y19/W20, JP9 open) is the standalone clock; X5 50 MHz DNI.
+- **Board needs BOTH 12 V barrel (J37) AND mini-USB (J2) to enumerate/program.** The
+  FT2232H runs off the +3.3 V rail, which is derived from 12 V (Fig A.3 + A.12), not USB.
+  If `lsusb` lacks 0403:6010 / `openFPGALoader --detect` says "device not found": reseat
+  the mini-USB and confirm 12 V (blue D26 "12VIN GOOD" + green D25 "+3.3V" LEDs lit).
+  Seen 2026-07-20 — a nudged mini-USB looked exactly like broken panel wiring.
 - **UART-to-FTDI is NOT populated** (R34/R35 DNI, UG §6.2) — the debug console is PMOD
   J31 ↔ **Pico debugprobe** UART bridge (probe GP4→J31.2/C7, GP5←J31.1/C6, GND→J31.5;
   `/dev/ttyACM0` @ 115200). FTDI I²C to bank 0 *is* wired.
