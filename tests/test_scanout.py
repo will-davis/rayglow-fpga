@@ -23,14 +23,14 @@ def channel(pix, ch):
     return (pix >> (16 - 8 * ch)) & 0xFF
 
 
-def run_frame_and_check(chains, unit_drive=None):
+def run_frame_and_check(chains, unit_drive=None, guard=0):
     W, S, B, U = 8, 2, 3, 2
     eff = unit_drive if unit_drive is not None else U
     imgs = [counting(W, 2 * S) for _ in range(chains)]
     for c, img in enumerate(imgs):          # make each chain's content distinct
         img[0][0] = (17 * (c + 1)) << 16
     dut = Hub75Core(
-        width=W, scan=S, chains=chains, planes=B, unit=U, unit_max=8,
+        width=W, scan=S, chains=chains, planes=B, unit=U, unit_max=8, guard=guard,
         banks_init=[banks_from_image(img, W, S) for img in imgs], lut_init=LUT3,
     )
     sim = Simulator(dut)
@@ -97,6 +97,43 @@ def test_golden_frame_two_chains():
 def test_runtime_unit_scales_littime():
     # Driving core.unit changes every pixel's on-time proportionally (the live A/B knob).
     run_frame_and_check(chains=1, unit_drive=5)
+
+
+def test_blanking_guard_preserves_littime():
+    # The guard adds blanked settle cycles after LATCH; lit-time (BCM weights) unchanged.
+    run_frame_and_check(chains=1, guard=4)
+
+
+def test_blanking_guard_blanks_before_display():
+    # After each LAT pulse there must be >=guard blanked cycles before OE de-asserts.
+    W, S, B, U, G = 8, 1, 2, 1, 4
+    img = counting(W, 2 * S)
+    dut = Hub75Core(width=W, scan=S, planes=B, unit=U, guard=G,
+                    banks_init=[banks_from_image(img, W, S)])
+    sim = Simulator(dut)
+    sim.add_clock(1e-6)
+
+    async def bench(ctx):
+        saw_lat = False
+        blanked_since_lat = 0
+        checked = 0
+        for _ in range(4000):
+            lat, blank = ctx.get(dut.lat), ctx.get(dut.blank)
+            if lat:
+                saw_lat, blanked_since_lat = True, 0
+            elif saw_lat and blank:
+                blanked_since_lat += 1
+            elif saw_lat and not blank:          # OE on: measure the gap we accumulated
+                assert blanked_since_lat >= G, f"only {blanked_since_lat} guard cycles, want >={G}"
+                saw_lat = False
+                checked += 1
+                if checked >= B:                  # checked a full row's worth of planes
+                    return
+            await ctx.tick()
+        raise AssertionError("never observed guarded latch->display transitions")
+
+    sim.add_testbench(bench)
+    sim.run()
 
 
 def test_real_geometry_one_row_smoke():

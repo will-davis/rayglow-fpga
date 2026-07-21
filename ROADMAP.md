@@ -109,10 +109,13 @@ Concepts: clock-domain crossing, async handshakes, video timing.
       no tearing. The wall is a monitor.
 - [x] RGB channel order CONFIRMED correct (fb0 XRGB8888 → panel R/G/B in order, 2026-07-20).
       No swizzle. Pinned in INTERFACE-CONTRACT §4a. rgb888, not bgr888.
-- [ ] Minor residual: last rows of the top half occasionally render slightly dim (seen
-      under high-speed camera; eye reads it clear). Same ghosting class as first light,
-      now tiny post-HAT. Fix if wanted = blanking-guard interval (SCANOUT.md v2); batch
-      with the other scan-out refinements (refresh measure, B=10-12).
+- [x] Boundary-row dimming FIXED with a blanking-guard interval (`guard=8`, ~667 ns settle
+      between LATCH and OE-enable). Root cause was the 1-cycle latch→driver gap; the rest
+      of the loop already blanks heavily. Confirmed "crystal clear, no flicker" on hardware
+      2026-07-20. Sim-proven BCM lit-time unchanged. Refresh cost negligible (139→137 Hz).
+- [x] Refresh (computed, deterministic FSM): bench 64×32 B=10 U=4 guard=8 = 137 Hz @ 12 MHz.
+      The **overlap** upgrade (shift-under-display) is the ~2× lever if ever needed
+      (SCANOUT.md) — deferred; 137 Hz is already flicker-free.
 - [ ] **Open: driver clamps `vactive` to 480** (asked 128, got 384×480 @ 16.8 Hz). Fine
       for the crop; the wall needs true 384×128. Investigate the RP1-DPI/KMS minimum-height
       path (panel-simple bridge / custom mode) before Phase 3.

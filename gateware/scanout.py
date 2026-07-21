@@ -30,11 +30,12 @@ from .patterns import cie1931_lut
 
 class Hub75Core(Elaboratable):
     def __init__(self, *, width, scan=16, chains=1, planes=10, unit=4, unit_max=None,
-                 banks_init=None, lut_init=None, external_fb=False):
+                 guard=0, banks_init=None, lut_init=None, external_fb=False):
         self.width = width
         self.scan = scan
         self.chains = chains
         self.planes = planes
+        self.guard = guard            # blanked settle cycles between LATCH and DISPLAY
         self._unit_max = unit_max if unit_max is not None else unit
         self.banks_init = banks_init or [[[], []] for _ in range(chains)]
         self.lut_init = lut_init or cie1931_lut(planes)
@@ -99,6 +100,8 @@ class Hub75Core(Elaboratable):
         phase = Signal()                          # pixel slot half: 0=data, 1=CLK high
         xo = Signal(range(W))                     # output slot index
         disp = Signal(range(UM << (B - 1)))       # display countdown (sized for max unit)
+        if self.guard:
+            guard_cnt = Signal(range(self.guard))
 
         m.d.comb += self.blank.eq(1)              # blanked except in DISPLAY
         m.d.sync += self.frame.eq(0)
@@ -120,7 +123,17 @@ class Hub75Core(Elaboratable):
             with m.State("LATCH"):                # 1 cycle, row data -> output latches
                 m.d.comb += self.lat.eq(1)
                 m.d.sync += disp.eq((self.unit << plane) - 1)
-                m.next = "DISPLAY"
+                if self.guard:
+                    m.d.sync += guard_cnt.eq(self.guard - 1)
+                    m.next = "GUARD"
+                else:
+                    m.next = "DISPLAY"
+            if self.guard:
+                with m.State("GUARD"):            # blanked settle: latch -> driver output
+                    with m.If(guard_cnt == 0):
+                        m.next = "DISPLAY"
+                    with m.Else():
+                        m.d.sync += guard_cnt.eq(guard_cnt - 1)
             with m.State("DISPLAY"):              # un-blank for U * 2**plane cycles
                 m.d.comb += self.blank.eq(0)
                 with m.If(disp == 0):

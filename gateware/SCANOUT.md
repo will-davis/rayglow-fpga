@@ -29,11 +29,19 @@ setup before the panel's rising-edge capture.
 ## FSM and BCM timing
 
 Per row address, for each plane b in 0..B-1: PRELOAD (2) → SHIFT (2W) → LATCH (1) →
-DISPLAY (U·2^b, blank de-asserted). So:
+GUARD (`guard`, blanked) → DISPLAY (U·2^b, blank de-asserted). So:
 
-    t_row   = B·(2W + 3) + U·(2^B − 1)      [cycles]
+    t_row   = B·(2W + 3 + guard) + U·(2^B − 1)      [cycles]
     refresh = f_clk / (scan · t_row)
     duty    = U·(2^B − 1) / t_row
+
+**`guard` (blanking-guard interval, added 2026-07-20):** blanked settle cycles inserted
+between the LATCH pulse and OE-enable. The rest of the loop already blanks heavily — the
+whole ~2W-cycle shift is blanked and the row address is set a full shift ahead — so the
+ONLY tight spot was latch→driver output (1 cycle). On hardware, `guard=8` (~667 ns at the
+12 MHz sync clock) **eliminated** the boundary-row dimming seen on the DPI feed (confirmed
+by eye and high-speed camera 2026-07-20). Cost is trivial: bench t_row 5402→5482, refresh
+139→137 Hz. Guard cycles are blanked so BCM lit-time is unchanged (sim-proven).
 
 | Config | f_clk | t_row | refresh | duty |
 |---|---|---|---|---|
@@ -45,10 +53,18 @@ DISPLAY (U·2^b, blank de-asserted). So:
 `unit` (U) is the brightness/refresh trade — the direct descendant of rayglow's
 `OE_GAIN`. Global brightness control later = scaling U or gating OE.
 
-## v2 upgrades (recorded, not yet built)
-1. Overlap: shift plane b+1 while displaying plane b (two coupled FSMs, latch handshake).
-2. Address set-ahead + blanking guard interval (ghosting control at high refresh).
-3. Brightness register; per-plane OE trim if the panel needs it.
+## Upgrades
+- [x] **Blanking-guard interval** (`guard`) — DONE, fixed the DPI-feed boundary flicker.
+- [x] Address set-ahead — already inherent (addr advances at the start of the next row's
+      shift, ~2W cycles before that row displays).
+- [x] Runtime brightness — the `unit` input scales OE live (lower U = dimmer + higher
+      refresh); the wall's all-white power cap rides on this.
+- [ ] **Overlap (the real refresh lever):** shift plane b+1 while displaying plane b, so
+      the ~2W-cycle shift stops costing duty. Roughly doubles refresh (bench ~139→~270 Hz,
+      duty ~76%→~100%). Two coupled FSMs + a double-buffered shift/latch handshake — the
+      one genuinely valuable, non-trivial scan-out upgrade left. Deferred; 139 Hz is
+      already flicker-free.
+- [ ] Per-plane OE trim, only if a specific panel needs it.
 
 ## Bench wiring: J32 ↔ one P6-3528 64x32 panel (INPUT connector)
 
