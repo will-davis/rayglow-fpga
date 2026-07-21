@@ -132,9 +132,14 @@ Concepts: clock-domain crossing, async handshakes, video timing.
       config.txt: keep `vc4-kms-v3d` — the dpi-generic overlay documents it as required.**
       Note: DPI moved to card1, HDMI card2 (disconnected → no fb renumber, fb0 still DPI);
       `--fbdev` added to `run_kms` as insurance if HDMI is ever plugged.
-- [ ] Full-width demo on the **6× single chain (384×32)**: FPGA translator width=384 +
-      PLL scan clock (brightness/refresh at 6× shift), Pi renders 384×32. The satisfying
-      "shaders across all six panels" step.
+- [x] **Full-width demo on the 6× single chain (384×32) — DONE 2026-07-21.** FPGA
+      translator width=384/chains=1, scan-out in a 40 MHz PLL `scan` domain (20 MHz shift)
+      via DomainRenamer sync→scan; Pi renders 384×32 over kms. `will-voidrainbow` spans all
+      six panels as one coherent frame, ~102 Hz. SI note: 30 MHz shift bled color toward
+      white per panel (data lines not settling over the 6-deep chain; shapes/clock stayed
+      clean) — dropped to 20 MHz shift and it cleared. `PLL12to30` (15 MHz) staged if a
+      longer/faster chain ever needs it. **This validates the parametric engine + PLL for
+      the Phase 3 wall.**
 - [ ] Cross-check: rayglow dry-run GIF vs FPGA-sim golden model on the same frame
 
 **Accept:** a rayglow shader at 60 fps on bench panel(s) over DPI, no tearing, gamma per
