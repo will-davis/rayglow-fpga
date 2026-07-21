@@ -24,7 +24,7 @@ Build + load:  uv run python -m gateware.top_translator
 from amaranth import ClockDomain, ClockSignal, DomainRenamer, Elaboratable, Module
 from amaranth.build import Attrs, Pins, Resource, Subsignal
 
-from .pll import PLL12to60
+from .pll import PLL12to40
 from .platform import ECP5EVNPlatform
 from .translator import DpiToHub75
 
@@ -42,8 +42,11 @@ class Top(Elaboratable):
         # 'pix' domain clocked by the Pi's DPI pixel clock (JP8 L18).
         m.domains.pix = ClockDomain("pix")
         m.d.comb += ClockSignal("pix").eq(dpi.pclk.i)
-        # 'scan' domain = 60 MHz PLL from the 12 MHz 'sync' reference; scan-out runs here.
-        m.submodules.pll = PLL12to60(domain="scan")
+        # 'scan' domain = 40 MHz PLL from the 12 MHz 'sync' reference -> 20 MHz HUB75
+        # shift. Dropped from 60/30 MHz: 30 MHz shift bled color toward white per panel
+        # over the 6-deep chain (data lines not settling); 20 MHz is comfortably within
+        # the v1-wall regime (37.5 MHz clean over 4). Fallback PLL12to30 (15 MHz) if needed.
+        m.submodules.pll = PLL12to40(domain="scan")
 
         tr = DpiToHub75(width=WIDTH, scan=SCAN, chains=1, planes=10, unit=16,
                         guard=40, vsync_active=1, max_w=1024, max_h=1024)
