@@ -124,9 +124,14 @@ Concepts: clock-domain crossing, async handshakes, video timing.
       live loop minus fold/pack/transport; forces resolve gamma=1.0 (FPGA owns gamma).
       On hardware: renderer → fb0 → FPGA → panel at 64×32, 119 fps render, blit ~0 ms.
       DPI clock bumped 3.5→12.5 MHz for 60 Hz (smooth) — driver still clamps to 384×480.
-- [ ] **Open (perf): the cloned Pi renders on `llvmpipe` (software), not V3D.** Fine at
-      64×32 (119 fps) but the full wall needs the hardware GPU. Investigate device/render-
-      node selection on the clone (DPI/KMS may have shifted card enumeration) before Phase 3.
+- [x] **V3D restored (2026-07-21).** Root cause: the `dtoverlay=vc4-kms-v3d` +
+      `max_framebuffers=2` lines were accidentally overwritten when the DPI overlay was
+      added — so the V3D *3D* driver never loaded (DPI display still worked via the
+      separate RP1-DPI driver, hence the confusion). Re-added them before the DPI overlay;
+      render dropped 7.5 ms (llvmpipe) → **0.2 ms (V3D 7.1.7)**. **Gotcha for the clone's
+      config.txt: keep `vc4-kms-v3d` — the dpi-generic overlay documents it as required.**
+      Note: DPI moved to card1, HDMI card2 (disconnected → no fb renumber, fb0 still DPI);
+      `--fbdev` added to `run_kms` as insurance if HDMI is ever plugged.
 - [ ] Full-width demo on the **6× single chain (384×32)**: FPGA translator width=384 +
       PLL scan clock (brightness/refresh at 6× shift), Pi renders 384×32. The satisfying
       "shaders across all six panels" step.
