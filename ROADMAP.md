@@ -83,8 +83,9 @@ matching prediction ±10 %, all sims green.
 
 Concepts: clock-domain crossing, async handshakes, video timing.
 
-- [ ] Pi 5: `vc4-kms-dpi-generic` overlay, rgb888, modeline per INTERFACE-CONTRACT.md;
-      verify PCLK/DE/sync on the scope before the FPGA ever sees them
+- [x] Pi 5: `vc4-kms-dpi-generic` overlay, rgb888, modeline per INTERFACE-CONTRACT.md.
+      DPI connector up (`card0-DPI-1: connected`), PLL locked at 3.5 MHz, polarities
+      `+V+DE+CK` match the gateware.
 - [x] DPI timing decoder (`gateware/dpi.py`, `DpiIn`): DE/VSYNC → (x,y)/valid/frame_start
       in the PCLK domain, modeline-agnostic, both sync polarities. Sim-verified over 2
       frames (`tests/test_dpi.py`) — caught + fixed an active-low first-frame edge bug.
@@ -100,16 +101,19 @@ Concepts: clock-domain crossing, async handshakes, video timing.
       2 clock buffers). PCLK-on-L18 auto-promotes to a global clock (risk retired). Bench
       crop: Pi at 384×128, translator at 64×32/1-chain, DoubleBuffer capture-bounds gate
       shows the top-left 64×32 of the Pi's frame on the one bench panel.
-- [ ] **Pi config fix (found 2026-07-20):** `dtoverlay=uart3` (GPIO8/9) + `dtparam=spi=on`
-      (GPIO7-11) collide with DPI's GPIO0-27 → DPI driver bailed ("Error applying setting,
-      reverse things back", no DRM connector). Comment both out + reboot. Then verify DPI
-      connector appears + `pinctrl` shows GPIO0-27 in alt (DPI) function.
-- [ ] Load `top.bit`, confirm the panel shows the Pi console crop; pin the RGB swizzle.
-- [ ] Milestone: **the panel shows the Pi's Linux console** — no rayglow code involved
-- [ ] Verify Pi 5 DPI color order (known quirk, raspberrypi/linux#6505); pin the swizzle
-      in the contract
+- [x] **Pi config fix (2026-07-20):** `dtoverlay=uart3` (GPIO8/9) + `dtparam=spi=on`
+      (GPIO7-11) collided with DPI's GPIO0-27 → DPI driver bailed ("reverse things back",
+      no connector). Commented both out + reboot → GPIO0-27 now in DPI alt-function.
+- [x] **Milestone MET 2026-07-20 — the panel shows the Pi's Linux console** (top-left
+      64×32 crop), no rayglow code involved. Pure white text, serifs, zero artifacts,
+      no tearing. The wall is a monitor.
+- [~] RGB channel order: ANSI color-bar test on tty1 displayed; pin the swizzle from what
+      the panel shows (white already proved all three channels light).
+- [ ] **Open: driver clamps `vactive` to 480** (asked 128, got 384×480 @ 16.8 Hz). Fine
+      for the crop; the wall needs true 384×128. Investigate the RP1-DPI/KMS minimum-height
+      path (panel-simple bridge / custom mode) before Phase 3.
 - [ ] rayglow repo: additive `--output kms` (render → DRM dumb-buffer blit on the DPI
-      connector first; direct GPU scan-out later). PIO path untouched
+      connector first; direct GPU scan-out later). PIO path untouched — **the payoff step.**
 - [ ] Cross-check: rayglow dry-run GIF vs FPGA-sim golden model on the same frame
 
 **Accept:** a rayglow shader at 60 fps on bench panel(s) over DPI, no tearing, gamma per
