@@ -61,9 +61,10 @@ by nextpnr to a global clock net (DCCA) — log: "promoting clock net dpi_0__pcl
 network", routes on global 0. Both domains pass timing with margin; CDC paths report as
 `<async>`. No PLL needed. `top_translator.py` builds clean.
 
-⚠ **Color order:** DPI `rgb888` line-to-color order (which of D0–D23 is R7..B0) is not yet
-confirmed on Pi 5 (raspberrypi/linux#6505). The gateware forms `pixel = {R,G,B}` via a
-named swizzle constant, resolved by eye at first console-on-panel and pinned here.
+✅ **Color order CONFIRMED (2026-07-20):** no swizzle needed. Framebuffer XRGB8888
+(0xFF0000 red / 0x00FF00 green / 0x0000FF blue) painted into fb0 came out RED/GREEN/BLUE
+on the panel in order. So `pixel_in[23:16]=R, [15:8]=G, [7:0]=B` (data lines D0..D23 =
+GPIO4..27 straight through). rgb888, not bgr888.
 
 ## 5. Out of scope (explicitly)
 - Audio/feature packets (UDP :5005) and the control plane (TCP :5006) terminate at the Pi

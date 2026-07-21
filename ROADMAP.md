@@ -107,8 +107,12 @@ Concepts: clock-domain crossing, async handshakes, video timing.
 - [x] **Milestone MET 2026-07-20 — the panel shows the Pi's Linux console** (top-left
       64×32 crop), no rayglow code involved. Pure white text, serifs, zero artifacts,
       no tearing. The wall is a monitor.
-- [~] RGB channel order: ANSI color-bar test on tty1 displayed; pin the swizzle from what
-      the panel shows (white already proved all three channels light).
+- [x] RGB channel order CONFIRMED correct (fb0 XRGB8888 → panel R/G/B in order, 2026-07-20).
+      No swizzle. Pinned in INTERFACE-CONTRACT §4a. rgb888, not bgr888.
+- [ ] Minor residual: last rows of the top half occasionally render slightly dim (seen
+      under high-speed camera; eye reads it clear). Same ghosting class as first light,
+      now tiny post-HAT. Fix if wanted = blanking-guard interval (SCANOUT.md v2); batch
+      with the other scan-out refinements (refresh measure, B=10-12).
 - [ ] **Open: driver clamps `vactive` to 480** (asked 128, got 384×480 @ 16.8 Hz). Fine
       for the crop; the wall needs true 384×128. Investigate the RP1-DPI/KMS minimum-height
       path (panel-simple bridge / custom mode) before Phase 3.
