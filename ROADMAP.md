@@ -119,8 +119,17 @@ Concepts: clock-domain crossing, async handshakes, video timing.
 - [ ] **Open: driver clamps `vactive` to 480** (asked 128, got 384×480 @ 16.8 Hz). Fine
       for the crop; the wall needs true 384×128. Investigate the RP1-DPI/KMS minimum-height
       path (panel-simple bridge / custom mode) before Phase 3.
-- [ ] rayglow repo: additive `--output kms` (render → DRM dumb-buffer blit on the DPI
-      connector first; direct GPU scan-out later). PIO path untouched — **the payoff step.**
+- [x] **rayglow `--output kms` IMPLEMENTED (2026-07-21, branch `feat/output-kms`).**
+      `kms_out.py` mmaps /dev/fb0 + blits the resolved RGB frame; `run_kms` mirrors the
+      live loop minus fold/pack/transport; forces resolve gamma=1.0 (FPGA owns gamma).
+      On hardware: renderer → fb0 → FPGA → panel at 64×32, 119 fps render, blit ~0 ms.
+      DPI clock bumped 3.5→12.5 MHz for 60 Hz (smooth) — driver still clamps to 384×480.
+- [ ] **Open (perf): the cloned Pi renders on `llvmpipe` (software), not V3D.** Fine at
+      64×32 (119 fps) but the full wall needs the hardware GPU. Investigate device/render-
+      node selection on the clone (DPI/KMS may have shifted card enumeration) before Phase 3.
+- [ ] Full-width demo on the **6× single chain (384×32)**: FPGA translator width=384 +
+      PLL scan clock (brightness/refresh at 6× shift), Pi renders 384×32. The satisfying
+      "shaders across all six panels" step.
 - [ ] Cross-check: rayglow dry-run GIF vs FPGA-sim golden model on the same frame
 
 **Accept:** a rayglow shader at 60 fps on bench panel(s) over DPI, no tearing, gamma per
