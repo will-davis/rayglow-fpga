@@ -76,6 +76,12 @@ class DoubleBuffer(Elaboratable):
         waddr = Signal(range(depth))
         m.d.comb += waddr.eq(addr * W + self.wr_x)
 
+        # Capture-bounds gate: ignore pixels outside this instance's WxH. Lets a small
+        # panel show a crop of a larger DPI frame (bench: top-left 64x32 of the Pi's
+        # 384x128). y-overflow is already dropped (no bank matches chain>=N); x needs an
+        # explicit guard or waddr would wrap within the bank. In-bounds frames (all sims)
+        # are unaffected since wr_x < W always holds there.
+        in_bounds = self.wr_x < W
         for b in range(2):
             for c in range(N):
                 for h in range(2):
@@ -83,7 +89,8 @@ class DoubleBuffer(Elaboratable):
                     m.d.comb += [
                         wp.addr.eq(waddr),
                         wp.data.eq(self.wr_pixel),
-                        wp.en.eq(self.wr_valid & (cap_buf == b) & (chain == c) & (half == h)),
+                        wp.en.eq(self.wr_valid & in_bounds
+                                 & (cap_buf == b) & (chain == c) & (half == h)),
                     ]
 
         # --- Reader (sync domain): read both buffers, output the front one ---

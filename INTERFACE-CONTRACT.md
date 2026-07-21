@@ -56,11 +56,10 @@ DPI GPIO → Pi 40-pin → RASP signal → ECP5 ball (bank 3, 3.3 V, no series R
 | | | | | D12 | 16 | P19 | | D22 | 26 | N16 |
 | | | | | D13 | 17 | N19 | | D23 | 27 | M18 |
 
-⚠ **Clock-routing risk to resolve at bring-up:** PCLK arrives on **L18, a general I/O**,
-not a dedicated GPLL/PCLK pin. The pixel domain must be clocked from it — verify nextpnr
-routes L18→a clock resource (may need `CLKI` from fabric, or a PLL fed by it, or the
-`ECPCLKDIV`/general-clock route). If routing/jitter is a problem, the fallback is to feed
-L18 into a PLL as reference. Confirm before trusting the DPI path.
+✅ **Clock-routing risk RESOLVED (2026-07-20):** PCLK on L18 (a general I/O) is auto-promoted
+by nextpnr to a global clock net (DCCA) — log: "promoting clock net dpi_0__pclk__i to global
+network", routes on global 0. Both domains pass timing with margin; CDC paths report as
+`<async>`. No PLL needed. `top_translator.py` builds clean.
 
 ⚠ **Color order:** DPI `rgb888` line-to-color order (which of D0–D23 is R7..B0) is not yet
 confirmed on Pi 5 (raspberrypi/linux#6505). The gateware forms `pixel = {R,G,B}` via a

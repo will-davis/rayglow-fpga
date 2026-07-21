@@ -96,8 +96,15 @@ Concepts: clock-domain crossing, async handshakes, video timing.
 - [x] Capstone sim (`tests/test_translator.py`): DPI video in `pix` → byte-exact panel
       out in `sync`, across two clocks; caught a frame-split + a measurement-window bug.
       13/13 sims green. JP8 pin map + PCLK-clock-routing risk recorded in the contract.
-- [ ] Board top `top_translator.py`: DPI in on JP8, HUB75 out on J32 — needs the modeline
-      live + the PCLK→clock-net decision (INTERFACE-CONTRACT §4a). Do at bring-up.
+- [x] Board top `top_translator.py`: DPI in on JP8, HUB75 out on J32; builds clean (8 EBR,
+      2 clock buffers). PCLK-on-L18 auto-promotes to a global clock (risk retired). Bench
+      crop: Pi at 384×128, translator at 64×32/1-chain, DoubleBuffer capture-bounds gate
+      shows the top-left 64×32 of the Pi's frame on the one bench panel.
+- [ ] **Pi config fix (found 2026-07-20):** `dtoverlay=uart3` (GPIO8/9) + `dtparam=spi=on`
+      (GPIO7-11) collide with DPI's GPIO0-27 → DPI driver bailed ("Error applying setting,
+      reverse things back", no DRM connector). Comment both out + reboot. Then verify DPI
+      connector appears + `pinctrl` shows GPIO0-27 in alt (DPI) function.
+- [ ] Load `top.bit`, confirm the panel shows the Pi console crop; pin the RGB swizzle.
 - [ ] Milestone: **the panel shows the Pi's Linux console** — no rayglow code involved
 - [ ] Verify Pi 5 DPI color order (known quirk, raspberrypi/linux#6505); pin the swizzle
       in the contract
