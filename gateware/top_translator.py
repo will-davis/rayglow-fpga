@@ -1,32 +1,34 @@
 """Phase 2 board top: Pi DPI in on JP8 -> HUB75 out on J32. The wall-as-monitor.
 
-Two async clock domains meet here (this is the whole point of the CDC):
-  pix  = the Pi's DPI pixel clock, arriving on JP8 (ball L18) — ~3.5 MHz for 384x128@60
-  sync = the EVN's 12 MHz FTDI clock (default) -> 6 MHz shift, ~139 Hz refresh
+Three clock domains meet here:
+  pix  = the Pi's DPI pixel clock on JP8 (ball L18), ~12.5 MHz for 384x480@60
+  scan = a 60 MHz PLL (from the 12 MHz FTDI clock) -> 30 MHz HUB75 shift
+  sync = the raw 12 MHz FTDI clock, used only as the PLL reference
 
-Bench crop: the Pi is configured 384x128 (final wall geometry) but only one 64x32 panel
-is attached, so the translator is built at 64x32/1-chain and the double buffer's
-capture-bounds gate keeps just the top-left 64x32 of the incoming frame.
+The scan-out runs in `scan` (60 MHz): a 6-panel-wide strip (384 px) shifts 6x longer
+than one panel, so the 12 MHz default clock would sag to ~63 Hz / 34% duty. The PLL
+brings it to ~150 Hz / ~68% duty at unit=16. Achieved with NO change to the scan-out
+engine or double buffer — just a DomainRenamer mapping their `sync` -> `scan`, while DPI
+capture stays in `pix`. The CDC (double_buffer.py) becomes pix<->scan; it doesn't care.
 
-DPI pin map: INTERFACE-CONTRACT.md §4a (JP8 -> bank 3). pixel_in = the 24 data lines in
-GPIO order; R/G/B channel order is provisional (grayscale console reads fine either way,
-color order pinned by eye — raspberrypi/linux#6505). HSYNC (U16) is driven by the Pi but
-unused here (DE-derived timing), so it's left unrequested (high-Z FPGA input).
+GEOMETRY: single chain of 6x P4/P6 64x32 panels = 384x32 (1/16 scan). The Pi renders
+384x32 (`--width 384 --height 32`) into the top-left of its 384x480 DPI frame; the FPGA
+captures that 384x32 region (bounds-gated) and drives all six panels off one HUB75 chain.
 
-⚠ PCLK (L18) is a general I/O, not a dedicated clock pin — watch the nextpnr log for
-clock-routing warnings; at 3.5 MHz there is enormous timing margin regardless.
+For a single 64x32 bench panel instead, set WIDTH=64 (the PLL is harmless there too).
 
 Build + load:  uv run python -m gateware.top_translator
                openFPGALoader -b ecp5_evn build/top.bit
 """
 
-from amaranth import ClockDomain, ClockSignal, Elaboratable, Module
+from amaranth import ClockDomain, ClockSignal, DomainRenamer, Elaboratable, Module
 from amaranth.build import Attrs, Pins, Resource, Subsignal
 
+from .pll import PLL12to60
 from .platform import ECP5EVNPlatform
 from .translator import DpiToHub75
 
-WIDTH, SCAN = 64, 16
+WIDTH, SCAN = 384, 16
 DPI_DATA = "U17 U18 T18 R18 U19 T19 U20 R20 T20 P20 P18 N20 " \
            "P19 N19 T16 R17 P16 R16 N17 P17 M17 N18 N16 M18"   # D0..D23 = GPIO4..27
 
@@ -37,26 +39,25 @@ class Top(Elaboratable):
         dpi = platform.request("dpi", 0)
         panel = platform.request("hub75", 0)
 
-        # 'pix' domain clocked directly by the Pi's DPI pixel clock (JP8 L18).
+        # 'pix' domain clocked by the Pi's DPI pixel clock (JP8 L18).
         m.domains.pix = ClockDomain("pix")
         m.d.comb += ClockSignal("pix").eq(dpi.pclk.i)
+        # 'scan' domain = 60 MHz PLL from the 12 MHz 'sync' reference; scan-out runs here.
+        m.submodules.pll = PLL12to60(domain="scan")
 
-        # max_w/max_h sized above any DPI mode the Pi might emit (it currently reports
-        # 384x480, not the requested 384x128) so the x/y counters never wrap mid-frame
-        # and re-capture over the cropped region.
-        m.submodules.tr = tr = DpiToHub75(
-            width=WIDTH, scan=SCAN, chains=1, planes=10, unit=4, guard=8, vsync_active=1,
-            max_w=1024, max_h=1024)
+        tr = DpiToHub75(width=WIDTH, scan=SCAN, chains=1, planes=10, unit=16,
+                        guard=40, vsync_active=1, max_w=1024, max_h=1024)
+        m.submodules.tr = DomainRenamer({"sync": "scan"})(tr)   # scan-out at 60 MHz
         m.d.comb += [
             tr.de.eq(dpi.de.i),
             tr.vsync.eq(dpi.vsync.i),
-            tr.pixel_in.eq(dpi.data.i),          # provisional R/G/B order
+            tr.pixel_in.eq(dpi.data.i),          # confirmed rgb888, no swizzle
             panel.rgb.o.eq(tr.rgb),
             panel.addr.o.eq(tr.addr),
             panel.clk.o.eq(tr.clk),
             panel.lat.o.eq(tr.lat),
             panel.oe.o.eq(tr.blank),
-            platform.request("led", 7).o.eq(tr.frame),   # flickers at scan-frame rate
+            platform.request("led", 7).o.eq(tr.frame),
         ]
         return m
 
