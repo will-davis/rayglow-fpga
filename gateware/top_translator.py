@@ -41,8 +41,12 @@ class Top(Elaboratable):
         m.domains.pix = ClockDomain("pix")
         m.d.comb += ClockSignal("pix").eq(dpi.pclk.i)
 
+        # max_w/max_h sized above any DPI mode the Pi might emit (it currently reports
+        # 384x480, not the requested 384x128) so the x/y counters never wrap mid-frame
+        # and re-capture over the cropped region.
         m.submodules.tr = tr = DpiToHub75(
-            width=WIDTH, scan=SCAN, chains=1, planes=10, unit=4, vsync_active=1)
+            width=WIDTH, scan=SCAN, chains=1, planes=10, unit=4, vsync_active=1,
+            max_w=1024, max_h=1024)
         m.d.comb += [
             tr.de.eq(dpi.de.i),
             tr.vsync.eq(dpi.vsync.i),
