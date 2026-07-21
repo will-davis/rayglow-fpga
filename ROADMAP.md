@@ -158,10 +158,19 @@ contract; RP2350 path still fully operational.
 Concepts: I/O banks, drive strength/slew, SI at 25–30 MHz, PCB design (KiCad + kicad-mcp,
 SKiDL flow proven on the rayglow HAT).
 
-- [ ] Re-cable wall 2×12 serpentine → **4 chains × 6** (chain k = tile row k, no fold)
-- [ ] Wing board rev A per hardware/WING-BOARD.md (2 identical boards = 4 chains; two more
-      of the same board = 8 chains later). Validate one full 6-panel chain on proto-area
-      shifters *before* ordering PCBs
+- **Level shifting: reuse the 2 RP2350 HATs first (decided 2026-07-21).** No custom PCB
+      needed to light the wall — each HAT's 4× '245 buffer 2 chains, always-enabled, NO
+      chip-select (the "CS" was the Pi→RP2350 link's, which the FPGA removes). ECP5→HAT J1
+      wiring map + power/ground in **hardware/RAYGLOW-HAT-ADAPTER.md**. `top_wall.py`
+      (NUM_CHAINS 2→4). Custom wing boards (WING-BOARD.md) come AFTER the wall is proven —
+      their only edge over the HAT is data-line series termination (higher shift clock).
+- [ ] **Stage 1: 1 HAT, 2 chains (384×64).** `top_wall.py` NUM_CHAINS=2 built (scan Fmax
+      79 MHz, 72 EBR). Re-cable top 2 rows as two 6-panel chains; wire per the adapter doc;
+      Pi renders 384×64. Validates the RayGLow-HAT interfacing + multi-chain scan-out.
+- [ ] **Stage 2: 2 HATs, 4 chains (384×128).** NUM_CHAINS=4; wire HAT #2 (chains 2,3)
+      identically, fan control to both HATs. Re-cable all 4 rows. Full wall over DPI.
+- [ ] Wing board rev A per hardware/WING-BOARD.md — the eventual clean replacement (series
+      termination → higher clock). Only after the wall is displaying on the HATs.
 - [ ] Power: '245 VCC ratiometric from each chain's panel-PSU domain; star ground per
       rayglow POWER-AND-GROUNDING.md; wall split on the horizontal midline (PSU per 2 rows)
 - [ ] SI validation at 25 MHz, series-R experiments (footprints on the wing board). Honest
