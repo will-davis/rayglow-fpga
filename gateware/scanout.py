@@ -83,13 +83,16 @@ class Hub75Core(Elaboratable):
                     m.d.comb += [port.en.eq(1), port.addr.eq(read_addr)]
                     fb_data_sigs.append(port.data)
 
-        # Gamma ROM: one logical Memory, 3 read ports per bank (R,G,B); the
-        # synthesizer replicates the underlying EBR to satisfy the port count.
-        lut = Memory(shape=B, depth=256, init=self.lut_init)
-        m.submodules.lut = lut
+        # Gamma ROM: ONE small memory per (chain-half, channel) read, not one shared
+        # memory with 2N*3 read ports. A single many-read-port memory makes yosys's
+        # MEMORY_LIBMAP pass explode (fine at 2 chains / 12 ports, OOMs at 4 / 24) — a
+        # pile of independent 1-read ROMs maps trivially instead. Identical gamma; sims
+        # unchanged. Each is 256xB, so yosys packs them into LUTRAM or one EBR each.
         for i, data in enumerate(fb_data_sigs):
             half, chain = i % 2, i // 2
             for ch, sl in enumerate([data[16:24], data[8:16], data[0:8]]):
+                lut = Memory(shape=B, depth=256, init=self.lut_init)
+                m.submodules[f"lut_{i}_{ch}"] = lut
                 port = lut.read_port()
                 m.d.comb += [
                     port.en.eq(1),

@@ -26,7 +26,7 @@ from .pll import PLL12to40
 from .platform import ECP5EVNPlatform
 from .translator import DpiToHub75
 
-NUM_CHAINS = 2          # 2 = one HAT (384x64, first bring-up); 4 = two HATs (full wall)
+NUM_CHAINS = 4          # 2 = one HAT (384x64, first bring-up); 4 = two HATs (full wall)
 WIDTH, SCAN = 384, 16
 
 # Per-chain RGB balls (R1 G1 B1 R2 G2 B2). Chains 0-2 on J32, chain 3 on J33.

@@ -146,12 +146,14 @@ Concepts: clock-domain crossing, async handshakes, video timing.
 contract; RP2350 path still fully operational.
 
 ### Notes for the Phase 3 wall build
-- **LUT replication scales with chains:** the gamma ROM has 3 read ports per chain-half
-  (24 at 4 chains). Cheap now (256×B), but if EBR gets tight, force it to LUTRAM/distributed
-  (`ram_style`) or time-multiplex — frees ~12–24 EBR.
-- **Full-wall `synth_ecp5` is slow** on the flattened design (stalls minutes in
-  MEMORY_LIBMAP with 16 wide dual-clock memories). Fine for a one-off bitstream build; if
-  it bites, synthesize per-chain or keep the framebuffer as a hierarchical black box.
+- **Gamma LUT is now one ROM per read port** (`scanout.py`), not one shared many-port
+  memory — the shared version OOM-killed yosys MEMORY_LIBMAP at 24 ports (4 chains). Costs
+  24 EBR at 4 chains (in the 80% total). If EBR ever gets tight (e.g. 512×128), force these
+  to LUTRAM (`ram_style="distributed"`) to reclaim them, or move gamma to the DPI-write
+  side (3 ports total, wider framebuffer).
+- **Heavy builds need the sandbox off:** the 4-chain synth peaks past the Bash sandbox's
+  memory cgroup — build with `dangerouslyDisableSandbox` (the machine has 251 GB; it's a
+  trusted local tool). The failure looks like SIGKILL/137.
 
 ## Phase 3 — Scale to the wall + wing boards
 
@@ -167,8 +169,17 @@ SKiDL flow proven on the rayglow HAT).
 - [ ] **Stage 1: 1 HAT, 2 chains (384×64).** `top_wall.py` NUM_CHAINS=2 built (scan Fmax
       79 MHz, 72 EBR). Re-cable top 2 rows as two 6-panel chains; wire per the adapter doc;
       Pi renders 384×64. Validates the RayGLow-HAT interfacing + multi-chain scan-out.
-- [ ] **Stage 2: 2 HATs, 4 chains (384×128).** NUM_CHAINS=4; wire HAT #2 (chains 2,3)
-      identically, fan control to both HATs. Re-cable all 4 rows. Full wall over DPI.
+- [x] **Stage 2 bitstream BUILT + fits (2026-07-22).** `top_wall.py` NUM_CHAINS=4:
+      168/208 EBR (80% = 144 framebuffer + 24 gamma ROMs), 1 PLL, both clocks pass timing
+      (scan ~68-83 MHz vs 40). The full 384×128 wall is proven buildable on the 85F.
+      **Fix applied:** the gamma LUT was one memory with 2N×3 read ports — yosys
+      MEMORY_LIBMAP OOM-killed at 24 ports (fine at 12). Split into per-read-port ROMs
+      (`scanout.py`) → maps trivially, sims unchanged. (Not a sandbox cap — real yosys
+      blowup; retried unsandboxed first to rule that out.)
+- [ ] **Stage 2 bring-up:** wire HAT #2 (chains 2,3) identically + fan control to both
+      HATs; re-cable all 4 rows; load `build/top.bit` (already the 4-chain, a superset that
+      runs HAT #1's 2 chains identically); renderer `--height 128`; asymmetric shader to
+      confirm the FLIP. Full wall over DPI.
 - [ ] Wing board rev A per hardware/WING-BOARD.md — the eventual clean replacement (series
       termination → higher clock). Only after the wall is displaying on the HATs.
 - [ ] Power: '245 VCC ratiometric from each chain's panel-PSU domain; star ground per
