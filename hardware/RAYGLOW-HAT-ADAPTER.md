@@ -69,6 +69,30 @@ fan out to BOTH HATs — run each control jumper to HAT #1 *and* HAT #2's matchi
 (one ECP5 pin, two destinations; two AHCT loads is trivial). Full 4-chain fit: J32 = all
 of chains 0-2 RGB (18), J33 = chain 3 RGB (6) + control (7).
 
+## Shared-control fan-out (CLK/LAT/OE/addr → both HATs)
+
+The 7 control signals drive both HATs, so each is a Y from one ECP5 pin to two J1 pins.
+- **CLK** (20 MHz pixel rate) is the one worth a twisted pair: CAT6a signal+GND per branch,
+  star-split at the ECP5 CLK pin, GND landing next to CLK at both the ECP5 and each J1
+  (pin 36) end. Tight return = clean edges.
+- **LAT/OE/addr change at row rate (~kHz)** — ~1000× slower than CLK; plain Y-jumpers are
+  fine (twist LAT/OE too if convenient, skip for addr).
+- J32/J33 are diff-pair headers with **DNI** termination footprints, so pins are plain
+  single-ended today. If CLK rings after twisting: (1) 22–33 Ω series R at the ECP5 source
+  before the split, then (2) populate a pair-termination footprint. Unlikely needed at 20 MHz.
+
+## Commands (quick reference)
+
+Reload the FPGA after any EVN power cycle (SRAM is volatile; permanent flash boot = Phase 4):
+```fish
+openFPGALoader -b ecp5_evn ~/Projects/rayglow-fpga/build/top.bit
+```
+Run the renderer on the Pi (ssh rpi5) — height = 32×(#chains): 64 for 2 chains, 128 for 4:
+```fish
+cd ~/rayglow; and uv run python -m rayglow.render <shader.glsl> \
+  --output kms --width 384 --height 128 --fbdev /dev/fb0 --no-listen --no-control
+```
+
 ## Bring-up notes
 
 - Shift clock starts at **20 MHz** (`PLL12to40`) — the value that ran the 6-panel single
