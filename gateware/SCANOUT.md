@@ -59,11 +59,15 @@ by eye and high-speed camera 2026-07-20). Cost is trivial: bench t_row 5402→54
       shift, ~2W cycles before that row displays).
 - [x] Runtime brightness — the `unit` input scales OE live (lower U = dimmer + higher
       refresh); the wall's all-white power cap rides on this.
-- [ ] **Overlap (the real refresh lever):** shift plane b+1 while displaying plane b, so
-      the ~2W-cycle shift stops costing duty. Roughly doubles refresh (bench ~139→~270 Hz,
-      duty ~76%→~100%). Two coupled FSMs + a double-buffered shift/latch handshake — the
-      one genuinely valuable, non-trivial scan-out upgrade left. Deferred; 139 Hz is
-      already flicker-free.
+- [x] **Overlap — DONE 2026-07-30** (`overlap=True`, sequential engine retained as
+      default). Shift-side (s_row/s_plane → FB reads + bit-select) split from display-side
+      (addr pins + OE duration); RUN overlaps them, LATCH promotes and advances; `frame`
+      pulses at the (0,0) wrap so the double buffer swaps under the last plane's display.
+      Per plane: max(shift, display) instead of shift+display →
+      t_row = Σ_b [1 + guard + max(2W+2, U·2^b)]. Wall (W=384 B=10 U=16 g=40 @40 MHz):
+      24,478 → 20,390 cycles/row = **122.6 Hz at 80.3 % duty** (was 102.1 / 66.9 %) —
+      faster AND brighter, and ≈2.04× the 60 Hz source (even presentation cadence).
+      Golden tests run both engines; monitor accumulates pulse-to-pulse.
 - [ ] Per-plane OE trim, only if a specific panel needs it.
 
 ## Bench wiring: J32 ↔ one P6-3528 64x32 panel (INPUT connector)

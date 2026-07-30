@@ -212,10 +212,11 @@ stable for hours, no visible SI artifacts at viewing distance.
       regression sim feeds DISTINCT frames at the real timing ratio (the old capstone's
       identical frames masked this). Constraint recorded: scan_frame < DPI_period −
       capture_time (9.8 < 12.4 ms today; a true vactive=128 mode would break it).
-- [ ] **Flicker (faint, pre-vsync): re-check after BOTH tearing fixes.** If it persists,
-      the fix is the **overlap upgrade** (SCANOUT.md): hide the shift under display →
-      refresh ~102 Hz → ~145 Hz at the same brightness. The cheap-but-dimmer alternative
-      is unit 16→8 (153 Hz at ~50 % duty).
+- [x] **Overlap engine SHIPPED (2026-07-30)** — the scan-skew/judder mitigation: 102.1 Hz
+      / 66.9 % duty → **122.6 Hz / 80.3 % duty** (faster AND brighter), and ≈2.04× the
+      60 Hz source so nearly every frame displays exactly twice (even cadence). In SRAM +
+      flash. Sequential engine kept behind `overlap=False`. 20/20 sims incl. overlap
+      golden-frame + overlap-is-faster. Details: SCANOUT.md.
 - [x] **Bitstream WRITTEN to SPI flash (2026-07-30). Root cause of the JEDEC=0xFF
       failures: the CFGMDN mode, not JP18** (which was correctly seated all along) —
       with SW1 in the old mode the config logic never routed the MSPI port to the flash;
