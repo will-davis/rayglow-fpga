@@ -57,8 +57,11 @@ rayglow's `ROADMAP.md` §5, `hardware/POWER-AND-GROUNDING.md`, and
   expansion: Versa J39 (~19) / J40 (~30). Signal plan: hardware/WING-BOARD.md.
 
 ## Current state
-ECP5 FPGA translation layer for the rayglow LED wall (Pi 5 DPI in → HUB75 out).
-**Phase 0 complete 2026-07-19**: toolchain (OSS CAD Suite in `~/opt`), blinky, button/DIP,
-PLL 12→60 MHz two-domain design, UART echo console via Pico debugprobe — all verified on
-hardware, all sims green. Next: **Phase 1** — the HUB75 BCM scan-out engine, sim-first,
-then first light on a retired P6 bench panel (wall v2 stays on the RP2350 path meanwhile).
+**THE FULL WALL IS LIVE (2026-07-29): all 4 chains, 384×128, rendering rayglow shaders
+over DPI** — Pi 5 (`--output kms`, vsync-paced blits, branch `feat/output-kms`) → JP8 DPI
+→ `top_wall.py` (NUM_CHAINS=4, 20 MHz shift via PLL12to40, 168/208 EBR) → 2× RayGLow
+RP2350 HATs (hardware/RAYGLOW-HAT-ADAPTER.md) → four 6-panel chains. Phases 0–3 done
+(wing boards parked — HATs serve the role). Phase 4 in flight: tearing fixed (vsync);
+flicker re-check pending, overlap upgrade (~102→145 Hz) is the fix if it persists; flash
+boot blocked on JP18 (Flash CS jumper) + SW1 MSPI switches; note the 12 MHz PLL ref needs
+USB plugged — true standalone needs the X2 200 MHz migration.

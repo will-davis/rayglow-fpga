@@ -176,12 +176,16 @@ SKiDL flow proven on the rayglow HAT).
       MEMORY_LIBMAP OOM-killed at 24 ports (fine at 12). Split into per-read-port ROMs
       (`scanout.py`) → maps trivially, sims unchanged. (Not a sandbox cap — real yosys
       blowup; retried unsandboxed first to rule that out.)
-- [ ] **Stage 2 bring-up:** wire HAT #2 (chains 2,3) identically + fan control to both
-      HATs; re-cable all 4 rows; load `build/top.bit` (already the 4-chain, a superset that
-      runs HAT #1's 2 chains identically); renderer `--height 128`; asymmetric shader to
-      confirm the FLIP. Full wall over DPI.
-- [ ] Wing board rev A per hardware/WING-BOARD.md — the eventual clean replacement (series
-      termination → higher clock). Only after the wall is displaying on the HATs.
+- [x] **Stage 2 bring-up COMPLETE (~2026-07-29): ALL FOUR CHAINS — THE FULL 384×128 WALL —
+      RENDERING SHADERS OVER DPI.** Took Will ~a week of physical debugging: one chain dead,
+      root cause a fried '245 on a HAT (found after probing every pin, two board rebuilds,
+      three rewires; all four '245s on that HAT replaced with fresh stock). will-apollo.glsl
+      at scale 1, ~120 fps render / 60 Hz DPI. Residuals at first light: tearing in fast
+      motion (fixed — see Phase 4 vsync) + faint flicker (re-check post-vsync; overlap is
+      the fix if it persists).
+- [ ] **Wing boards: PARKED (Will, 2026-07-29).** The RayGLow HATs serve the role; revisit
+      only for footprint/wiring consolidation, not function. (WING-BOARD.md kept as the
+      design record.)
 - [ ] Power: '245 VCC ratiometric from each chain's panel-PSU domain; star ground per
       rayglow POWER-AND-GROUNDING.md; wall split on the horizontal midline (PSU per 2 rows)
 - [ ] SI validation at 25 MHz, series-R experiments (footprints on the wing board). Honest
@@ -195,9 +199,28 @@ stable for hours, no visible SI artifacts at viewing distance.
 
 ## Phase 4 — Polish + headroom
 
-- [ ] B=10–12 BCM + brightness control (global OE scale)
-- [ ] Bitstream in SPI flash (MSPI boot via CFGMDN switches) — wall works at power-on
+- [x] **Tearing fixed (2026-07-29): vsync-paced blits.** `kms_out.py` gains `_VBlank` —
+      `DRM_IOCTL_WAIT_VBLANK` on the DRM card backing the fbdev (matched via sysfs parent
+      device, robust to card renumbering — it's moved card1→card0 across reboots). Every
+      blit lands in vertical blanking; loop locks to 60 Hz. Root cause was the fbdev blit
+      racing the DPI scanout at 120 fps — Pi-side, not the FPGA (its double-buffer swap
+      was always tear-free).
+- [ ] **Flicker (faint, pre-vsync): re-check now that blits are paced.** If it persists,
+      the fix is the **overlap upgrade** (SCANOUT.md): hide the shift under display →
+      refresh ~102 Hz → ~145 Hz at the same brightness. The cheap-but-dimmer alternative
+      is unit 16→8 (153 Hz at ~50 % duty).
+- [~] **Bitstream in SPI flash — BLOCKED on JP18.** `openFPGALoader -f` (and with
+      `--unprotect-flash`) fails exactly at flash access; JTAG comms clean → check/install
+      **JP18** (Flash Chip Select jumper, UG Fig 6.2 — bridges FPGA BUSY_CSSPIN to the
+      flash CS). Then rewrite flash and set **SW1 for MSPI boot: pos2 ON, pos3 OFF, pos4 ON**
+      (CFGMDN2:1:0 = 0:1:0, Table 3.3; ON = grounded = 0 — if it doesn't boot, that polarity
+      assumption flips). Fallback tool: `ecpprog`. ⚠ Caveat: the design's PLL reference is
+      the 12 MHz FTDI clock, which only runs while the mini-USB is plugged into a powered
+      host — so flash boot works with USB connected (plug it into the Pi permanently:
+      also enables reflash-over-SSH), but true no-USB standalone needs the X2 200 MHz
+      oscillator migration (LVDS input question, deferred).
 - [ ] EVN mini-USB → Pi USB: reflash over SSH (`openFPGALoader` on the Pi)
+- [ ] B=10–12 BCM + brightness control (global OE scale)
 - [ ] Optional: 120 Hz DPI mode; temporal dithering; per-chain diagnostics counters
       readable over the debug UART/I²C
 

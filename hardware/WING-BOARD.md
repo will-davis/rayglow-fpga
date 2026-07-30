@@ -1,5 +1,10 @@
 # WING-BOARD — modular 2-chain level-shifter board
 
+> **STATUS: PARKED (Will, 2026-07-29).** The full 4-chain wall runs on the two RayGLow
+> RP2350 HATs (hardware/RAYGLOW-HAT-ADAPTER.md) — they serve the same role. Revisit only
+> to consolidate footprint/wiring, or if a higher shift clock (needing data-line series
+> termination) is ever wanted. Kept as the design record.
+
 Design intent (2026-07-18, pre-PCB — Phase 3 executes this). One PCB design, built in
 multiples: **each board drives exactly 2 complete chains**; 2 boards = today's 4×6 wall,
 2 more of the *same board* = the 8×3 escape hatch. PCB lead time is why modularity wins.
