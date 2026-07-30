@@ -205,7 +205,14 @@ stable for hours, no visible SI artifacts at viewing distance.
       blit lands in vertical blanking; loop locks to 60 Hz. Root cause was the fbdev blit
       racing the DPI scanout at 120 fps — Pi-side, not the FPGA (its double-buffer swap
       was always tear-free).
-- [ ] **Flicker (faint, pre-vsync): re-check now that blits are paced.** If it persists,
+- [x] **FPGA-side tearing fixed (2026-07-29): the 16-row-banded frame mixing** under fast
+      motion (Will's rayballs photo) was the double-buffer CDC — toggle fired at next
+      frame_start (reader displayed the buffer being overwritten for up to a scan frame),
+      plus an off-by-one buffer phase once completion-fired. Fixed in `double_buffer.py`;
+      regression sim feeds DISTINCT frames at the real timing ratio (the old capstone's
+      identical frames masked this). Constraint recorded: scan_frame < DPI_period −
+      capture_time (9.8 < 12.4 ms today; a true vactive=128 mode would break it).
+- [ ] **Flicker (faint, pre-vsync): re-check after BOTH tearing fixes.** If it persists,
       the fix is the **overlap upgrade** (SCANOUT.md): hide the shift under display →
       refresh ~102 Hz → ~145 Hz at the same brightness. The cheap-but-dimmer alternative
       is unit 16→8 (153 Hz at ~50 % duty).
