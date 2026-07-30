@@ -233,12 +233,19 @@ stable for hours, no visible SI artifacts at viewing distance.
       rayglow now drives DRM directly (`drm_out.py`: dumb buffers + hardware PAGE_FLIP,
       event-paced, `--kms-backend auto`). Writes now hit real WC scanout memory; 0 missed
       flips. Bonus: fbcon's cursor no longer writes over the wall.
-- [~] **Third artifact layer (single-row streaks, 2026-07-30): DPI capture sampling
-      phase.** RP1 drives data on the RISING PCLK edge (+CK); we captured on the same
-      edge — marginal at 12.5 MHz → occasional mis-sampled rows (horizontal streaks).
-      Fixed to FALLING-edge capture; **LED D11 now latches on any malformed captured
-      line** (the permanent capture-health telltale — must stay dark at any clock).
-      Loaded on the wall — awaiting Will's eyeball + D11 check.
+- [x] **Third "artifact" RECLASSIFIED (2026-07-30): presentation physics, not corruption.**
+      Two independent proofs the data path is clean: (a) armed line-integrity checkers
+      (D9 blink / D10 short / D11 long, arm after first VSYNC) stay dark indefinitely —
+      every captured line is exactly 384 px; (b) Will's long-exposure photo integrates
+      many refreshes and is flawless — the frame CONTENT is correct. The visible streaks
+      under fast motion = multiplexed-scan physics: a camera exposure (or tracking eye)
+      straddles two ~102 Hz scan frames showing two 60 Hz source frames, interleaved at
+      the 16-row scan structure; worsened by the uneven 102/60 cadence (1-vs-2 scan
+      frames per source frame). Same reason filming commercial LED walls needs shutter
+      sync. Freeze test: pause content mid-motion → streaks vanish while scan continues.
+      Falling-edge capture + PCLK/DE hysteresis retained (correct + margin for 120 Hz).
+      **Mitigations = the roadmap: overlap upgrade (shrinks skew window, ~147 Hz @ HIGHER
+      duty), tune `unit` for ~2× source cadence, and eventually 120 Hz DPI source.**
 - [ ] EVN mini-USB → Pi USB: reflash over SSH (`openFPGALoader` on the Pi)
 - [ ] B=10–12 BCM + brightness control (global OE scale)
 - [ ] Optional: 120 Hz DPI mode; temporal dithering; per-chain diagnostics counters
