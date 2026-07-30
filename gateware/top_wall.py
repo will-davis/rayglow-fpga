@@ -57,8 +57,11 @@ class Top(Elaboratable):
         m.d.comb += ClockSignal("pix").eq(~dpi.pclk.i)
         m.submodules.pll = PLL12to40(domain="scan")     # 20 MHz HUB75 shift
 
+        # overlap=True: shift plane b+1 while displaying plane b -> ~122.6 Hz at 80.3 %
+        # duty (was 102.1 Hz / 66.9 % sequential). 122.6 ≈ 2.04x the 60 Hz source, so
+        # nearly every source frame shows for exactly 2 scan frames (even cadence).
         tr = DpiToHub75(width=WIDTH, scan=SCAN, chains=NUM_CHAINS, planes=10, unit=16,
-                        guard=40, vsync_active=1, max_w=1024, max_h=1024,
+                        guard=40, overlap=True, vsync_active=1, max_w=1024, max_h=1024,
                         expect_dpi_w=WIDTH)             # DPI hactive == wall width (384)
         m.submodules.tr = DomainRenamer({"sync": "scan"})(tr)
         m.d.comb += [

@@ -23,7 +23,7 @@ def channel(pix, ch):
     return (pix >> (16 - 8 * ch)) & 0xFF
 
 
-def run_frame_and_check(chains, unit_drive=None, guard=0):
+def run_frame_and_check(chains, unit_drive=None, guard=0, overlap=False):
     W, S, B, U = 8, 2, 3, 2
     eff = unit_drive if unit_drive is not None else U
     imgs = [counting(W, 2 * S) for _ in range(chains)]
@@ -31,6 +31,7 @@ def run_frame_and_check(chains, unit_drive=None, guard=0):
         img[0][0] = (17 * (c + 1)) << 16
     dut = Hub75Core(
         width=W, scan=S, chains=chains, planes=B, unit=U, unit_max=8, guard=guard,
+        overlap=overlap,
         banks_init=[banks_from_image(img, W, S) for img in imgs], lut_init=LUT3,
     )
     sim = Simulator(dut)
@@ -44,20 +45,30 @@ def run_frame_and_check(chains, unit_drive=None, guard=0):
         row_shift = []
         latched = None
         prev_clk = 0
+        pulses = 0
         for _ in range(50_000):
             clk, lat = ctx.get(dut.clk), ctx.get(dut.lat)
             blank, addr = ctx.get(dut.blank), ctx.get(dut.addr)
             rgb, frame = ctx.get(dut.rgb), ctx.get(dut.frame)
 
             if clk and not prev_clk:
-                assert blank, "v1 property violated: shifting while displaying"
+                if not overlap:               # v1 only: overlap shifts WHILE displaying
+                    assert blank, "v1 property violated: shifting while displaying"
                 row_shift.append(rgb)
             if lat:
                 assert blank and not clk, "LAT must strobe while blanked, CLK idle"
                 assert len(row_shift) == W, f"latched {len(row_shift)} pixels, expected {W}"
                 latched = row_shift
                 row_shift = []
-            if not blank:
+            # Accumulate over one steady-state frame = between pulse 1 and pulse 2.
+            # (Overlap pulses `frame` at the wrap LATCH, before the last plane's display
+            # lands, so the power-on..pulse-1 window undercounts; pulse-to-pulse holds
+            # exactly one display of every (row, plane) in BOTH engines.)
+            if frame:
+                pulses += 1
+                if pulses == 2:
+                    return
+            if pulses == 1 and not blank:
                 assert latched is not None
                 for x in range(W):
                     bits = latched[x]
@@ -67,10 +78,8 @@ def run_frame_and_check(chains, unit_drive=None, guard=0):
                                 if (bits >> (c * 6 + half * 3 + ch)) & 1:
                                     acc[c][addr + half * S][x][ch] += 1
             prev_clk = clk
-            if frame:
-                return
             await ctx.tick()
-        raise AssertionError("no frame pulse within cycle budget")
+        raise AssertionError("second frame pulse never arrived within cycle budget")
 
     sim.add_testbench(bench)
     sim.run()
@@ -102,6 +111,47 @@ def test_runtime_unit_scales_littime():
 def test_blanking_guard_preserves_littime():
     # The guard adds blanked settle cycles after LATCH; lit-time (BCM weights) unchanged.
     run_frame_and_check(chains=1, guard=4)
+
+
+def test_overlap_golden_frame():
+    # v2 engine: shift-under-display must not change any pixel's lit-time.
+    run_frame_and_check(chains=1, overlap=True)
+
+
+def test_overlap_golden_frame_two_chains_guarded():
+    run_frame_and_check(chains=2, guard=4, overlap=True)
+
+
+def test_overlap_runtime_unit():
+    run_frame_and_check(chains=1, overlap=True, unit_drive=5)
+
+
+def test_overlap_is_faster():
+    # The point of overlap: frame period (pulse-to-pulse) must shrink vs sequential.
+    def frame_cycles(overlap):
+        W, S, B, U = 8, 2, 3, 2
+        img = counting(W, 2 * S)
+        dut = Hub75Core(width=W, scan=S, planes=B, unit=U, overlap=overlap,
+                        banks_init=[banks_from_image(img, W, S)], lut_init=LUT3)
+        sim = Simulator(dut)
+        sim.add_clock(1e-6)
+        out = {}
+
+        async def bench(ctx):
+            ticks, marks = 0, []
+            while len(marks) < 3 and ticks < 30_000:
+                if ctx.get(dut.frame):
+                    marks.append(ticks)
+                ticks += 1
+                await ctx.tick()
+            out["period"] = marks[2] - marks[1]
+
+        sim.add_testbench(bench)
+        sim.run()
+        return out["period"]
+
+    seq, ovl = frame_cycles(False), frame_cycles(True)
+    assert ovl < seq, f"overlap ({ovl} cycles/frame) not faster than sequential ({seq})"
 
 
 def test_blanking_guard_blanks_before_display():

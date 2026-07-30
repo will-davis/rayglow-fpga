@@ -19,8 +19,8 @@ from .scanout import Hub75Core
 
 class DpiToHub75(Elaboratable):
     def __init__(self, *, width, scan=16, chains=1, planes=10, unit=4, unit_max=None,
-                 guard=0, lut_init=None, vsync_active=1, max_w=512, max_h=256,
-                 expect_dpi_w=None):
+                 guard=0, overlap=False, lut_init=None, vsync_active=1, max_w=512,
+                 max_h=256, expect_dpi_w=None):
         self.width = width
         self.scan = scan
         self.chains = chains
@@ -28,6 +28,7 @@ class DpiToHub75(Elaboratable):
         self.unit = unit
         self.unit_max = unit_max
         self.guard = guard
+        self.overlap = overlap
         self.lut_init = lut_init
         self.vsync_active = vsync_active
         self.max_w = max_w
@@ -70,7 +71,7 @@ class DpiToHub75(Elaboratable):
         m.submodules.core = core = Hub75Core(
             width=self.width, scan=self.scan, chains=self.chains, planes=self.planes,
             unit=self.unit, unit_max=self.unit_max, guard=self.guard,
-            lut_init=self.lut_init, external_fb=True)
+            overlap=self.overlap, lut_init=self.lut_init, external_fb=True)
 
         m.d.comb += [dpi.de.eq(self.de), dpi.vsync.eq(self.vsync),
                      dpi.pixel_in.eq(self.pixel_in)]

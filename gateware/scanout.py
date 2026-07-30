@@ -30,12 +30,13 @@ from .patterns import cie1931_lut
 
 class Hub75Core(Elaboratable):
     def __init__(self, *, width, scan=16, chains=1, planes=10, unit=4, unit_max=None,
-                 guard=0, banks_init=None, lut_init=None, external_fb=False):
+                 guard=0, overlap=False, banks_init=None, lut_init=None, external_fb=False):
         self.width = width
         self.scan = scan
         self.chains = chains
         self.planes = planes
         self.guard = guard            # blanked settle cycles between LATCH and DISPLAY
+        self.overlap = overlap        # v2 engine: shift plane b+1 WHILE displaying plane b
         self._unit_max = unit_max if unit_max is not None else unit
         self.banks_init = banks_init or [[[], []] for _ in range(chains)]
         self.lut_init = lut_init or cie1931_lut(planes)
@@ -65,8 +66,13 @@ class Hub75Core(Elaboratable):
 
         plane = Signal(range(B))
         x_read = Signal(range(W))
+        # The read path (FB row + LUT plane bit) belongs to the SHIFT side; the panel
+        # addr pins + OE duration belong to the DISPLAY side. Sequential mode keeps them
+        # equal; overlap mode splits them (shift row/plane runs one latch ahead).
+        read_row = Signal(range(S))
+        sel_plane = Signal(range(B))
         read_addr = Signal(range(W * S))
-        m.d.comb += read_addr.eq(self.addr * W + x_read)
+        m.d.comb += read_addr.eq(read_row * W + x_read)
 
         # Framebuffer: raw RGB888 per (chain, half), read at [addr*W + x]. Either an
         # internal ROM (default, banks_init) or driven externally (Phase 2 double buffer).
@@ -97,18 +103,24 @@ class Hub75Core(Elaboratable):
                 m.d.comb += [
                     port.en.eq(1),
                     port.addr.eq(sl),
-                    self.rgb[chain * 6 + half * 3 + ch].eq(port.data.bit_select(plane, 1)),
+                    self.rgb[chain * 6 + half * 3 + ch].eq(
+                        port.data.bit_select(sel_plane, 1)),
                 ]
 
         phase = Signal()                          # pixel slot half: 0=data, 1=CLK high
         xo = Signal(range(W))                     # output slot index
-        disp = Signal(range(UM << (B - 1)))       # display countdown (sized for max unit)
+        disp = Signal(range((UM << (B - 1)) + 1))  # countdown; +1: overlap loads unit<<p
         if self.guard:
             guard_cnt = Signal(range(self.guard))
 
-        m.d.comb += self.blank.eq(1)              # blanked except in DISPLAY
+        m.d.comb += self.blank.eq(1)              # blanked except while displaying
         m.d.sync += self.frame.eq(0)
 
+        if self.overlap:
+            return self._elaborate_overlap(m, disp, guard_cnt if self.guard else None,
+                                           read_row, sel_plane, x_read)
+
+        m.d.comb += [read_row.eq(self.addr), sel_plane.eq(plane)]
         with m.FSM():
             with m.State("PRELOAD"):              # 2 cycles: prime FB+LUT pipeline for x=0
                 m.d.sync += phase.eq(~phase)
@@ -151,4 +163,82 @@ class Hub75Core(Elaboratable):
                     m.next = "PRELOAD"
                 with m.Else():
                     m.d.sync += disp.eq(disp - 1)
+        return m
+
+    def _elaborate_overlap(self, m, disp, guard_cnt, read_row, sel_plane, x_read):
+        """v2 engine: the panel's input shift register is loaded with plane b+1 WHILE the
+        output latches display plane b — per plane the row costs max(shift, display)
+        instead of shift + display. LSB planes hide entirely under the shift; MSB planes
+        hide the shift entirely: at W=384/B=10/U=16/guard=40 that's 24478 -> ~20390
+        cycles/row = 122.6 Hz at 80.3 % duty (was 102.1 Hz at 66.9 %).
+
+        Split state: (s_row, s_plane) is what the shifter is loading (drives the FB read
+        row + LUT bit-select); (addr pins, d_plane) is what the latches are displaying.
+        LATCH promotes shift->display, advances the shift pointer, and pulses `frame`
+        when the shifter wraps to (0,0) — i.e. while the LAST plane still displays, so
+        the double buffer swaps before the next frame's first FB read (the guard cycles
+        guarantee the gap). Cold start: disp_valid=0 blanks the first RUN (shift only).
+        """
+        W, S, B = self.width, self.scan, self.planes
+
+        s_row = Signal(range(S))      # shift side: row being loaded
+        s_plane = Signal(range(B))    # shift side: plane being loaded
+        d_plane = Signal(range(B))    # display side: plane on the output latches
+        disp_valid = Signal()         # latches hold real data (0 only at cold start)
+        shifting = Signal(init=1)     # cold start: shift (0,0) first, never latch garbage
+        sc = Signal(range(2 * W + 2))                 # 2 prime cycles + 2W slot cycles
+        rel = Signal(range(2 * W))
+
+        m.d.comb += [read_row.eq(s_row), sel_plane.eq(s_plane), rel.eq(sc - 2)]
+        shift_done_now = shifting & (sc == 2 * W + 1)
+
+        with m.FSM():
+            with m.State("RUN"):
+                # -- shifter: 2-cycle pipeline prime, then W slots of 2 cycles --
+                with m.If(shifting):
+                    m.d.sync += sc.eq(sc + 1)
+                    with m.If(sc >= 2):
+                        m.d.comb += [x_read.eq(rel[1:] + 1), self.clk.eq(rel[0])]
+                    with m.If(shift_done_now):
+                        m.d.sync += shifting.eq(0)
+                # -- display: OE active while the countdown runs --
+                with m.If(disp_valid & (disp != 0)):
+                    m.d.comb += self.blank.eq(0)
+                    m.d.sync += disp.eq(disp - 1)
+                # -- both sides idle: latch the freshly-shifted plane --
+                done_shift = ~shifting | shift_done_now
+                done_disp = ~disp_valid | (disp == 0)
+                with m.If(done_shift & done_disp):
+                    m.next = "LATCH"
+            with m.State("LATCH"):                    # 1 cycle: inputs -> output latches
+                m.d.comb += self.lat.eq(1)
+                m.d.sync += [
+                    self.addr.eq(s_row),              # display row follows (blanked now)
+                    d_plane.eq(s_plane),
+                    disp_valid.eq(1),
+                    disp.eq(self.unit << s_plane),    # duration of the plane just latched
+                    sc.eq(0),
+                    shifting.eq(1),                   # next plane's shift starts post-guard
+                ]
+                # advance the shift pointer; frame pulse as the shifter wraps to (0,0) —
+                # the double buffer swaps while the old frame's last plane displays.
+                with m.If(s_plane == B - 1):
+                    m.d.sync += s_plane.eq(0)
+                    with m.If(s_row == S - 1):
+                        m.d.sync += [s_row.eq(0), self.frame.eq(1)]
+                    with m.Else():
+                        m.d.sync += s_row.eq(s_row + 1)
+                with m.Else():
+                    m.d.sync += s_plane.eq(s_plane + 1)
+                if self.guard:
+                    m.d.sync += guard_cnt.eq(self.guard - 1)
+                    m.next = "GUARD"
+                else:
+                    m.next = "RUN"
+            if self.guard:
+                with m.State("GUARD"):                # blanked settle, shifter held
+                    with m.If(guard_cnt == 0):
+                        m.next = "RUN"
+                    with m.Else():
+                        m.d.sync += guard_cnt.eq(guard_cnt - 1)
         return m
