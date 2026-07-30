@@ -247,8 +247,18 @@ stable for hours, no visible SI artifacts at viewing distance.
       Falling-edge capture + PCLK/DE hysteresis retained (correct + margin for 120 Hz).
       **Mitigations = the roadmap: overlap upgrade (shrinks skew window, ~147 Hz @ HIGHER
       duty), tune `unit` for ~2× source cadence, and eventually 120 Hz DPI source.**
-- [ ] EVN mini-USB → Pi USB: reflash over SSH (`openFPGALoader` on the Pi)
-- [ ] B=10–12 BCM + brightness control (global OE scale)
+- [x] **EVN mini-USB → Pi USB (2026-07-30): the wall is self-contained.** openfpgaloader
+      (apt, v0.13.1) + udev rule on the Pi; `--detect` clean; full reflash-over-SSH loop
+      validated: build on desktop → `scp build/top.bit rpi5:/tmp/` →
+      `ssh rpi5 "openFPGALoader -b ecp5_evn -f --unprotect-flash /tmp/top.bit"` — the
+      trailing Refresh boots the new flash image automatically. Desktop JTAG retired.
+- [x] **B=11 BCM + hardware brightness knob (2026-07-30).** 11 planes at default unit=8 =
+      identical total brightness to B=10/unit=16 with 2× finer dark-end resolution;
+      ~117.9 Hz / 77.2 % duty / ~1.97× source cadence (B=12 rejected: −4 % more refresh
+      AND only 4 brightness steps below default). Runtime `unit` exposed through
+      DpiToHub75 and wired to **SW5 positions 1–4** (4-bit, FFSync'd into scan domain):
+      all OFF = default 8; else the value 1–15 directly (≈12 %–190 %; dimmer = faster
+      refresh, brighter = slower, 71.8 Hz at 15). In SRAM + flash.
 - [ ] Optional: 120 Hz DPI mode; temporal dithering; per-chain diagnostics counters
       readable over the debug UART/I²C
 

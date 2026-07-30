@@ -25,7 +25,7 @@ class DpiToHub75(Elaboratable):
         self.scan = scan
         self.chains = chains
         self.planes = planes
-        self.unit = unit
+        self._unit_init = unit        # constructor int (self.unit is the runtime Signal)
         self.unit_max = unit_max
         self.guard = guard
         self.overlap = overlap
@@ -39,6 +39,10 @@ class DpiToHub75(Elaboratable):
         self.de = Signal()
         self.vsync = Signal()
         self.pixel_in = Signal(24)
+        # Runtime brightness (scan domain): passthrough of Hub75Core.unit — the LSB
+        # display time; scales all BCM planes linearly. Undriven = constructor default.
+        um = unit_max if unit_max is not None else unit
+        self.unit = Signal(range(um + 1), init=unit)
         # HUB75 out (sync domain)
         self.clk = Signal()
         self.lat = Signal()
@@ -70,14 +74,14 @@ class DpiToHub75(Elaboratable):
             width=self.width, scan=self.scan, chains=self.chains)
         m.submodules.core = core = Hub75Core(
             width=self.width, scan=self.scan, chains=self.chains, planes=self.planes,
-            unit=self.unit, unit_max=self.unit_max, guard=self.guard,
+            unit=self._unit_init, unit_max=self.unit_max, guard=self.guard,
             overlap=self.overlap, lut_init=self.lut_init, external_fb=True)
 
         m.d.comb += [dpi.de.eq(self.de), dpi.vsync.eq(self.vsync),
                      dpi.pixel_in.eq(self.pixel_in)]
         m.d.comb += [db.wr_x.eq(dpi.x), db.wr_y.eq(dpi.y), db.wr_pixel.eq(dpi.pixel),
                      db.wr_valid.eq(dpi.valid), db.wr_frame_start.eq(dpi.frame_start)]
-        m.d.comb += db.rd_addr.eq(core.fb_addr)
+        m.d.comb += [db.rd_addr.eq(core.fb_addr), core.unit.eq(self.unit)]
         for i in range(2 * self.chains):
             m.d.comb += core.fb_data[i].eq(db.rd_data[i])
         m.d.comb += db.rd_frame_end.eq(core.frame)

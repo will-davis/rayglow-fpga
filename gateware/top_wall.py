@@ -19,8 +19,10 @@ Build + load:  uv run python -m gateware.top_wall
                openFPGALoader -b ecp5_evn build/top.bit
 """
 
-from amaranth import ClockDomain, ClockSignal, DomainRenamer, Elaboratable, Module
+from amaranth import (Cat, ClockDomain, ClockSignal, DomainRenamer, Elaboratable,
+                      Module, Mux, Signal)
 from amaranth.build import Attrs, Pins, Resource, Subsignal
+from amaranth.lib.cdc import FFSynchronizer
 
 from .pll import PLL12to40
 from .platform import ECP5EVNPlatform
@@ -57,13 +59,24 @@ class Top(Elaboratable):
         m.d.comb += ClockSignal("pix").eq(~dpi.pclk.i)
         m.submodules.pll = PLL12to40(domain="scan")     # 20 MHz HUB75 shift
 
-        # overlap=True: shift plane b+1 while displaying plane b -> ~122.6 Hz at 80.3 %
-        # duty (was 102.1 Hz / 66.9 % sequential). 122.6 ≈ 2.04x the 60 Hz source, so
-        # nearly every source frame shows for exactly 2 scan frames (even cadence).
-        tr = DpiToHub75(width=WIDTH, scan=SCAN, chains=NUM_CHAINS, planes=10, unit=16,
-                        guard=40, overlap=True, vsync_active=1, max_w=1024, max_h=1024,
+        # overlap=True: shift plane b+1 while displaying plane b. B=11 planes at unit=8
+        # keeps the B=10/unit=16 total brightness with 2x finer dark-end resolution:
+        # ~117.9 Hz at 77.2 % duty, cadence ~1.97x the 60 Hz source.
+        tr = DpiToHub75(width=WIDTH, scan=SCAN, chains=NUM_CHAINS, planes=11, unit=8,
+                        unit_max=16, guard=40, overlap=True, vsync_active=1,
+                        max_w=1024, max_h=1024,
                         expect_dpi_w=WIDTH)             # DPI hactive == wall width (384)
         m.submodules.tr = DomainRenamer({"sync": "scan"})(tr)
+
+        # Hardware brightness knob: SW5 positions 1-4 = a 4-bit code (position 1 = LSB).
+        # All OFF -> default unit=8 (today's brightness). Any other pattern -> unit 1-15:
+        # 1 ~ 12 % ... 15 ~ 190 %. Dimmer also means faster refresh; brighter, slower
+        # (71.8 Hz at 15). Synchronized into the scan domain; a mid-frame change just
+        # takes effect at the next plane latch.
+        sw_raw = Cat(platform.request("switch", i).i for i in range(4))
+        sw = Signal(4)
+        m.submodules.sw_sync = FFSynchronizer(sw_raw, sw, o_domain="scan")
+        m.d.comb += tr.unit.eq(Mux(sw == 0, 8, sw))
         m.d.comb += [
             tr.de.eq(dpi.de.i),
             tr.vsync.eq(dpi.vsync.i),

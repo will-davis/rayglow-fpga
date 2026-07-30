@@ -81,17 +81,29 @@ The 7 control signals drive both HATs, so each is a Y from one ECP5 pin to two J
   single-ended today. If CLK rings after twisting: (1) 22–33 Ω series R at the ECP5 source
   before the split, then (2) populate a pair-termination footprint. Unlikely needed at 20 MHz.
 
-## Commands (quick reference)
+## Commands (quick reference — Pi-hosted since 2026-07-30)
 
-Reload the FPGA after any EVN power cycle (SRAM is volatile; permanent flash boot = Phase 4):
+The EVN's mini-USB now plugs into the **Pi**; the board boots itself from flash (SW1 in
+MSPI). Reflash with a new build (desktop → Pi → board; the trailing Refresh auto-boots):
 ```fish
-openFPGALoader -b ecp5_evn ~/Projects/rayglow-fpga/build/top.bit
+scp ~/Projects/rayglow-fpga/build/top.bit rpi5:/tmp/top.bit
+ssh rpi5 "openFPGALoader -b ecp5_evn -f --unprotect-flash /tmp/top.bit"
 ```
-Run the renderer on the Pi (ssh rpi5) — height = 32×(#chains): 64 for 2 chains, 128 for 4:
+Volatile SRAM-only load (fast iteration, lost on power cycle):
+```fish
+ssh rpi5 "openFPGALoader -b ecp5_evn /tmp/top.bit"
+```
+Run the renderer on the Pi — height = 32×(#chains): 64 for 2 chains, 128 for 4:
 ```fish
 cd ~/rayglow; and uv run python -m rayglow.render <shader.glsl> \
-  --output kms --width 384 --height 128 --fbdev /dev/fb0 --no-listen --no-control
+  --output kms --width 384 --height 128 --scale 1
 ```
+
+## Hardware brightness knob (SW5 positions 1–4)
+
+4-bit code, position 1 = LSB. **All OFF = default brightness (unit 8, ~118 Hz).**
+Any other pattern = `unit` 1–15 directly: 1 ≈ 12 % (fastest refresh) … 8 = 100 % …
+15 ≈ 190 % (71.8 Hz). Change anytime; takes effect within a frame.
 
 ## Bring-up notes
 
