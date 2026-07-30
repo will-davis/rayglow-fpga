@@ -45,16 +45,26 @@ class DpiToHub75(Elaboratable):
         self.addr = Signal(range(scan))
         self.rgb = Signal(6 * chains)
         self.frame = Signal()
-        # Diagnostics (pix domain): latches on the first malformed DPI line seen.
-        self.line_err = Signal()
+        # Diagnostics (pix domain), armed after the first VSYNC:
+        self.err_short = Signal()   # latch: some line captured SHORT (DE glitch class)
+        self.err_long = Signal()    # latch: some line captured LONG (PCLK-ringing class)
+        self.err_blink = Signal()   # ~0.4 s pulse per bad line (error-rate visibility)
 
     def elaborate(self, platform):
         m = Module()
         m.submodules.dpi = dpi = DomainRenamer("pix")(
             DpiIn(max_w=self.max_w, max_h=self.max_h, vsync_active=self.vsync_active,
                   expect_w=self.expect_dpi_w))
-        with m.If(dpi.line_bad):
-            m.d.pix += self.line_err.eq(1)
+        with m.If(dpi.line_short):
+            m.d.pix += self.err_short.eq(1)
+        with m.If(dpi.line_long):
+            m.d.pix += self.err_long.eq(1)
+        blink = Signal(23)                        # ~0.4 s at a 12.5 MHz pixel clock
+        with m.If(dpi.line_short | dpi.line_long):
+            m.d.pix += blink.eq(2**23 - 1)
+        with m.Elif(blink != 0):
+            m.d.pix += blink.eq(blink - 1)
+        m.d.comb += self.err_blink.eq(blink != 0)
         m.submodules.db = db = DoubleBuffer(
             width=self.width, scan=self.scan, chains=self.chains)
         m.submodules.core = core = Hub75Core(

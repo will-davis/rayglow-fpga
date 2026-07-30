@@ -71,7 +71,10 @@ class Top(Elaboratable):
             wall.lat.o.eq(tr.lat),
             wall.oe.o.eq(tr.blank),
             platform.request("led", 7).o.eq(tr.frame),
-            platform.request("led", 6).o.eq(tr.line_err),   # D11: capture-error latch
+            # Capture-health cluster (armed after first VSYNC — startup partials ignored):
+            platform.request("led", 6).o.eq(tr.err_long),    # D11: LONG lines = PCLK ringing
+            platform.request("led", 5).o.eq(tr.err_short),   # D10: SHORT lines = DE glitches
+            platform.request("led", 4).o.eq(tr.err_blink),   # D9: blinks ~0.4s per bad line
         ]
         return m
 
@@ -81,11 +84,14 @@ if __name__ == "__main__":
     plat = ECP5EVNPlatform()
     plat.add_resources([
         Resource("dpi", 0,
-                 Subsignal("pclk", Pins("L18", dir="i")),
-                 Subsignal("de", Pins("L17", dir="i")),
-                 Subsignal("vsync", Pins("T17", dir="i")),
-                 Subsignal("data", Pins(DPI_DATA, dir="i")),
-                 Attrs(IO_TYPE="LVCMOS33")),
+                 # HYSTERESIS=ON (Schmitt-style input) on the two edge-critical lines:
+                 # if the 40-pin ribbon rings at 12.5 MHz, this filters the double-edges.
+                 Subsignal("pclk", Pins("L18", dir="i"),
+                           Attrs(IO_TYPE="LVCMOS33", HYSTERESIS="ON")),
+                 Subsignal("de", Pins("L17", dir="i"),
+                           Attrs(IO_TYPE="LVCMOS33", HYSTERESIS="ON")),
+                 Subsignal("vsync", Pins("T17", dir="i"), Attrs(IO_TYPE="LVCMOS33")),
+                 Subsignal("data", Pins(DPI_DATA, dir="i"), Attrs(IO_TYPE="LVCMOS33"))),
         Resource("wall", 0,
                  Subsignal("rgb", Pins(rgb_pins, dir="o")),
                  Subsignal("addr", Pins(ADDR_BALLS, dir="o")),

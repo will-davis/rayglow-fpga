@@ -32,7 +32,8 @@ class DpiIn(wiring.Component):
     valid: Out(1)
     frame_start: Out(1)
 
-    line_bad: Out(1)   # 1-cycle pulse: a line just ended with != expect_w active pixels
+    line_short: Out(1)  # pulse: line ended with < expect_w pixels (DE glitch / missed clocks)
+    line_long: Out(1)   # pulse: line ended with > expect_w pixels (extra clocks — PCLK ringing)
 
     def __init__(self, *, max_w=512, max_h=256, vsync_active=1, expect_w=None):
         self.max_w = max_w
@@ -65,13 +66,22 @@ class DpiIn(wiring.Component):
             m.d.sync += x.eq(x + 1)               # advance for the next active PCLK
         with m.If(de_fall):
             m.d.sync += [x.eq(0), y.eq(y + 1)]    # rewind column, next line
-            # Capture-integrity check: every active line must be exactly expect_w
-            # pixels. A short/long line means DE or PCLK was mis-sampled (clock-phase
-            # or SI trouble) — the single-row glitch class seen on the wall 2026-07-29.
-            if self.expect_w is not None:
-                m.d.sync += self.line_bad.eq(x != self.expect_w)
-        with m.Else():
-            m.d.sync += self.line_bad.eq(0)
+
+        # Capture-integrity check: every active line must be exactly expect_w pixels.
+        # SHORT lines = DE dropped early / clocks missed; LONG = extra clocks (PCLK
+        # ringing double-counts). Armed only after the first VSYNC so the partial line
+        # inevitably seen at configure/signal-acquire time doesn't false-positive (the
+        # D11-lights-instantly trap, 2026-07-30). One real DE glitch mid-row shows up
+        # as TWO short lines (the row splits) — the streak signature.
+        if self.expect_w is not None:
+            armed = Signal()
+            with m.If(vs_edge):
+                m.d.sync += armed.eq(1)
+            with m.If(de_fall & armed):
+                m.d.sync += [self.line_short.eq(x < self.expect_w),
+                             self.line_long.eq(x > self.expect_w)]
+            with m.Else():
+                m.d.sync += [self.line_short.eq(0), self.line_long.eq(0)]
 
         with m.If(vs_edge):
             m.d.sync += [y.eq(0), frame_pending.eq(1)]
