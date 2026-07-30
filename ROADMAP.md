@@ -216,23 +216,29 @@ stable for hours, no visible SI artifacts at viewing distance.
       the fix is the **overlap upgrade** (SCANOUT.md): hide the shift under display →
       refresh ~102 Hz → ~145 Hz at the same brightness. The cheap-but-dimmer alternative
       is unit 16→8 (153 Hz at ~50 % duty).
-- [~] **Bitstream in SPI flash — flash chip NOT RESPONDING (2026-07-29 verbose run):
-      JEDEC ID reads 0xFFFFFF** = nothing drives MISO = chip-select not reaching U4.
-      JTAG comms clean; `ecpprog` hangs the same way. Prime suspect: the jumper checked
-      was **J18 (a SERDES SMA!)**, not **JP18** — the 2-pin Flash-Chip-Select shunt near
-      U4/SW1, right side of the board (Fig 1.3; Fig 6.2 shows it bridging BUSY_CSSPIN →
-      flash CS). Verify JP18 has a shunt, then `openFPGALoader -b ecp5_evn -f
-      --unprotect-flash build/top.bit`, then **SW1 MSPI: pos2 ON, pos3 OFF, pos4 ON**
-      (CFGMDN2:1:0=0:1:0; ON=grounded=0 — if no boot, polarity assumption flips) + power
-      cycle. ⚠ PLL ref = 12 MHz FTDI clock → flash boot still needs the mini-USB plugged
-      into a powered host (plug into the Pi: also enables reflash-over-SSH); true no-USB
-      standalone needs the X2 200 MHz migration (deferred).
+- [x] **Bitstream WRITTEN to SPI flash (2026-07-30). Root cause of the JEDEC=0xFF
+      failures: the CFGMDN mode, not JP18** (which was correctly seated all along) —
+      with SW1 in the old mode the config logic never routed the MSPI port to the flash;
+      the moment Will set **SW1 to MSPI (pos2 ON, pos3 OFF, pos4 ON)**, JEDEC read
+      0xC22018 (Macronix MX25L128) and the 4-chain wall bitstream wrote clean, 100 % +
+      refresh. Lesson: flash access via JTAG passthrough requires the MSPI CFGMDN mode.
+- [ ] **Flash-boot POWER-CYCLE TEST (Will, whenever ready):** power cycle the EVN →
+      expect green DONE within ~1 s and the wall alive with NO host command. Keep the
+      mini-USB plugged into a powered host (12 MHz FTDI clock = PLL ref). If no boot,
+      the SW1 ON=0 polarity assumption flips. ⚠ True no-USB standalone still needs the
+      X2 200 MHz migration (deferred).
 - [x] **Second tearing layer root-caused + fixed (2026-07-29): /dev/fb0 is fbdev
       EMULATION** — a cached shadow whose kernel worker copies 4 KB (~2.7-row) chunks to
       scanout unsynced to vblank → the fine-band shear that survived both earlier fixes.
       rayglow now drives DRM directly (`drm_out.py`: dumb buffers + hardware PAGE_FLIP,
       event-paced, `--kms-backend auto`). Writes now hit real WC scanout memory; 0 missed
       flips. Bonus: fbcon's cursor no longer writes over the wall.
+- [~] **Third artifact layer (single-row streaks, 2026-07-30): DPI capture sampling
+      phase.** RP1 drives data on the RISING PCLK edge (+CK); we captured on the same
+      edge — marginal at 12.5 MHz → occasional mis-sampled rows (horizontal streaks).
+      Fixed to FALLING-edge capture; **LED D11 now latches on any malformed captured
+      line** (the permanent capture-health telltale — must stay dark at any clock).
+      Loaded on the wall — awaiting Will's eyeball + D11 check.
 - [ ] EVN mini-USB → Pi USB: reflash over SSH (`openFPGALoader` on the Pi)
 - [ ] B=10–12 BCM + brightness control (global OE scale)
 - [ ] Optional: 120 Hz DPI mode; temporal dithering; per-chain diagnostics counters
