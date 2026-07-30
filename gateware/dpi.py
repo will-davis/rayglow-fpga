@@ -32,10 +32,13 @@ class DpiIn(wiring.Component):
     valid: Out(1)
     frame_start: Out(1)
 
-    def __init__(self, *, max_w=512, max_h=256, vsync_active=1):
+    line_bad: Out(1)   # 1-cycle pulse: a line just ended with != expect_w active pixels
+
+    def __init__(self, *, max_w=512, max_h=256, vsync_active=1, expect_w=None):
         self.max_w = max_w
         self.max_h = max_h
         self.vsync_active = vsync_active
+        self.expect_w = expect_w        # None disables the line-length check
         super().__init__()
 
     def elaborate(self, platform):
@@ -62,6 +65,13 @@ class DpiIn(wiring.Component):
             m.d.sync += x.eq(x + 1)               # advance for the next active PCLK
         with m.If(de_fall):
             m.d.sync += [x.eq(0), y.eq(y + 1)]    # rewind column, next line
+            # Capture-integrity check: every active line must be exactly expect_w
+            # pixels. A short/long line means DE or PCLK was mis-sampled (clock-phase
+            # or SI trouble) — the single-row glitch class seen on the wall 2026-07-29.
+            if self.expect_w is not None:
+                m.d.sync += self.line_bad.eq(x != self.expect_w)
+        with m.Else():
+            m.d.sync += self.line_bad.eq(0)
 
         with m.If(vs_edge):
             m.d.sync += [y.eq(0), frame_pending.eq(1)]

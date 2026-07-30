@@ -19,7 +19,8 @@ from .scanout import Hub75Core
 
 class DpiToHub75(Elaboratable):
     def __init__(self, *, width, scan=16, chains=1, planes=10, unit=4, unit_max=None,
-                 guard=0, lut_init=None, vsync_active=1, max_w=512, max_h=256):
+                 guard=0, lut_init=None, vsync_active=1, max_w=512, max_h=256,
+                 expect_dpi_w=None):
         self.width = width
         self.scan = scan
         self.chains = chains
@@ -31,6 +32,7 @@ class DpiToHub75(Elaboratable):
         self.vsync_active = vsync_active
         self.max_w = max_w
         self.max_h = max_h
+        self.expect_dpi_w = expect_dpi_w   # DPI mode's hactive (None = check off)
 
         # DPI in (pix domain)
         self.de = Signal()
@@ -43,11 +45,16 @@ class DpiToHub75(Elaboratable):
         self.addr = Signal(range(scan))
         self.rgb = Signal(6 * chains)
         self.frame = Signal()
+        # Diagnostics (pix domain): latches on the first malformed DPI line seen.
+        self.line_err = Signal()
 
     def elaborate(self, platform):
         m = Module()
         m.submodules.dpi = dpi = DomainRenamer("pix")(
-            DpiIn(max_w=self.max_w, max_h=self.max_h, vsync_active=self.vsync_active))
+            DpiIn(max_w=self.max_w, max_h=self.max_h, vsync_active=self.vsync_active,
+                  expect_w=self.expect_dpi_w))
+        with m.If(dpi.line_bad):
+            m.d.pix += self.line_err.eq(1)
         m.submodules.db = db = DoubleBuffer(
             width=self.width, scan=self.scan, chains=self.chains)
         m.submodules.core = core = Hub75Core(

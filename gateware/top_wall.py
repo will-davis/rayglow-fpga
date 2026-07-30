@@ -48,12 +48,18 @@ class Top(Elaboratable):
         dpi = platform.request("dpi", 0)
         wall = platform.request("wall", 0)
 
+        # Capture on the FALLING PCLK edge: the RP1 drives DPI data on the RISING edge
+        # (mode flag +CK), so rising-edge capture samples right at the data transition —
+        # fine at 3.5 MHz, marginal at 12.5 MHz (single-row glitches seen on the wall
+        # 2026-07-29/30). Falling-edge sampling lands mid-eye, half a period of margin
+        # each side. LED D11 (line_err) latches if any malformed line is ever captured.
         m.domains.pix = ClockDomain("pix")
-        m.d.comb += ClockSignal("pix").eq(dpi.pclk.i)
+        m.d.comb += ClockSignal("pix").eq(~dpi.pclk.i)
         m.submodules.pll = PLL12to40(domain="scan")     # 20 MHz HUB75 shift
 
         tr = DpiToHub75(width=WIDTH, scan=SCAN, chains=NUM_CHAINS, planes=10, unit=16,
-                        guard=40, vsync_active=1, max_w=1024, max_h=1024)
+                        guard=40, vsync_active=1, max_w=1024, max_h=1024,
+                        expect_dpi_w=WIDTH)             # DPI hactive == wall width (384)
         m.submodules.tr = DomainRenamer({"sync": "scan"})(tr)
         m.d.comb += [
             tr.de.eq(dpi.de.i),
@@ -65,6 +71,7 @@ class Top(Elaboratable):
             wall.lat.o.eq(tr.lat),
             wall.oe.o.eq(tr.blank),
             platform.request("led", 7).o.eq(tr.frame),
+            platform.request("led", 6).o.eq(tr.line_err),   # D11: capture-error latch
         ]
         return m
 
