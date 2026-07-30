@@ -32,12 +32,13 @@ def test_write_swap_read_two_clocks():
                 ctx.set(dut.wr_y, y)
                 ctx.set(dut.wr_pixel, img(x, y))
                 ctx.set(dut.wr_valid, 1)
+                # frame_start rides the first pixel, exactly as DpiIn emits it
+                ctx.set(dut.wr_frame_start, 1 if (x == 0 and y == 0) else 0)
                 await ctx.tick("pix")
         ctx.set(dut.wr_valid, 0)
-        ctx.set(dut.wr_frame_start, 1)     # signal frame complete -> handoff
-        await ctx.tick("pix")
-        ctx.set(dut.wr_frame_start, 0)
-        await ctx.tick("pix")
+        ctx.set(dut.wr_y, H)               # y advances past the last captured row (as
+        await ctx.tick("pix")              # DpiIn's counter does) -> capture-complete
+        await ctx.tick("pix")              # toggle fires -> handoff
         state["written"] = True
 
     async def reader(ctx):
@@ -62,3 +63,66 @@ def test_write_swap_read_two_clocks():
     sim.add_testbench(writer)
     sim.add_testbench(reader)
     sim.run()
+
+
+def test_no_tearing_with_distinct_frames():
+    """Every scan sweep must show ONE source frame — never a mix (the wall-tear bug).
+
+    Writer streams DPI-like frames whose every pixel = the frame id, followed by
+    out-of-bounds rows (like the real 480-line mode) and a blanking gap. Reader
+    continuously sweeps the full buffer at a faster cadence, swapping only at its own
+    sweep boundary. Any sweep containing two different ids is a torn frame. The original
+    swap-on-next-frame-start protocol fails this (reader keeps showing a buffer the
+    writer has started overwriting); the swap-on-capture-complete protocol passes.
+    """
+    W, S, N = 8, 2, 1
+    H = 2 * S * N
+    dut = DoubleBuffer(width=W, scan=S, chains=N)
+    sim = Simulator(dut)
+    sim.add_clock(1e-6, domain="pix")
+    sim.add_clock(0.3e-6, domain="sync")
+    state = {"done": False}
+    sweeps = []
+
+    async def writer(ctx):
+        for frame in range(1, 7):
+            for y in range(H + 4):                    # H captured + 4 dropped rows
+                for x in range(W):
+                    ctx.set(dut.wr_x, x)
+                    ctx.set(dut.wr_y, y)
+                    ctx.set(dut.wr_pixel, frame)
+                    ctx.set(dut.wr_valid, 1)
+                    ctx.set(dut.wr_frame_start, 1 if (x == 0 and y == 0) else 0)
+                    await ctx.tick("pix")
+                ctx.set(dut.wr_valid, 0)              # hblank
+                ctx.set(dut.wr_frame_start, 0)
+                for _ in range(2):
+                    await ctx.tick("pix")
+            for _ in range(40):                       # vblank / idle gap
+                await ctx.tick("pix")
+        state["done"] = True
+
+    async def reader(ctx):
+        # Dwell per address like the real scan (planes+display), so a sweep spans
+        # ~60% of a writer frame — the ratio on the real wall (9.8 ms vs 16.7 ms).
+        # A too-fast reader shrinks the tear window and hides the bug.
+        while not state["done"]:
+            seen = set()
+            for addr in range(W * S):
+                ctx.set(dut.rd_addr, addr)
+                for _ in range(15):
+                    await ctx.tick("sync")
+                for h in range(2):
+                    seen.add(ctx.get(dut.rd_data[h]))
+            ctx.set(dut.rd_frame_end, 1)
+            await ctx.tick("sync")
+            ctx.set(dut.rd_frame_end, 0)
+            sweeps.append(seen)
+
+    sim.add_testbench(writer)
+    sim.add_testbench(reader)
+    sim.run()
+
+    torn = [s for s in sweeps if len(s) > 1]
+    assert not torn, f"torn sweeps (mixed source frames): {torn[:5]} of {len(sweeps)}"
+    assert any(s != {0} for s in sweeps), "reader never saw real frames (test harness bug)"

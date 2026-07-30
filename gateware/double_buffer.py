@@ -13,13 +13,18 @@ generalized to N stacked chains:
     waddr = addr * width + x
 
 CDC — the crux. The writer strictly ALTERNATES its capture buffer every DPI frame and
-raises a 1-bit toggle. The reader carries that toggle across with a 2-FF synchronizer,
-edge-detects it, and — only at its OWN frame boundary (`rd_frame_end`, so no mid-scan
-tear) — flips `front`. Only ONE bit crosses domains. The invariant that keeps writer and
-reader on disjoint buffers is the matched initial condition wr_buf=1 / front=0: the writer
-always fills ~(the buffer the reader currently shows), for the whole frame, regardless of
-exactly when the reader adopts it. (Reader is 140-500 Hz vs the 60 Hz writer, so it never
-misses a toggle; a slower reader would drop frames, never tear.)
+raises a 1-bit toggle when a frame's capture COMPLETES (last captured row done). The
+reader carries that toggle across with a 2-FF synchronizer, edge-detects it, and — only
+at its OWN frame boundary (`rd_frame_end`, so no mid-scan switch) — flips `front`. Only
+ONE bit crosses domains.
+
+Disjointness (learned the hard way): the toggle must fire at capture COMPLETION, not at
+the next frame's first pixel. The reader takes up to one scan frame to act on it; if the
+writer is already filling the reader's front buffer during that window, the panel shows a
+mix of two frames, striped at the 16-row scan structure (seen on the wall 2026-07-29 —
+the sim missed it because the capstone fed identical frames). With completion-fired
+toggles the reader swaps during the writer's idle tail; safe while
+scan_frame_period < DPI_period − capture_time (9.8 ms < 12.4 ms today).
 """
 
 from amaranth import Elaboratable, Module, Mux, Signal
@@ -63,12 +68,33 @@ class DoubleBuffer(Elaboratable):
         # effect for that pixel too, else the frame splits across both buffers. cap_buf is
         # the buffer this cycle's pixel lands in (already flipped on frame_start); wr_buf
         # holds it for the rest of the frame. Startup shows ~1 empty frame, then corrects.
-        wr_buf = Signal(init=1)              # capture buffer; init 1 (reader starts on 0)
-        producer_toggle = Signal(init=0)     # flips every completed DPI frame
+        # Phase matters: the reader's front after k toggles is (k mod 2), so frame k must
+        # land in buffer (k mod 2) for the reader to adopt the frame just completed.
+        # wr_buf init=0 -> the frame_start flip puts frame 1 in buf1 while the reader
+        # shows (zeroed) buf0; every later frame writes opposite the reader's front.
+        wr_buf = Signal(init=0)              # capture buffer phase (see above)
+        producer_toggle = Signal(init=0)     # flips when a frame's CAPTURE completes
         cap_buf = Signal()
         m.d.comb += cap_buf.eq(Mux(self.wr_frame_start, ~wr_buf, wr_buf))
         with m.If(self.wr_frame_start):
-            m.d.pix += [wr_buf.eq(~wr_buf), producer_toggle.eq(~producer_toggle)]
+            m.d.pix += wr_buf.eq(~wr_buf)
+
+        # Swap notice fires when the LAST CAPTURED ROW completes (wr_y rises past H-1) —
+        # NOT at the next frame_start. The reader consumes it at its own frame boundary,
+        # so it must have left the old front BEFORE the writer starts the next frame into
+        # it: guaranteed iff scan_frame_period < DPI_period − capture_time. Wall today:
+        # 9.8 ms < 16.7 − 4.3 ms ✓ (the 480-line mode idles ~73% of the frame after our
+        # 128 rows). ⚠ A true vactive=128 mode leaves only the blanking as margin —
+        # revisit this handoff if that ever lands. The original swap-on-frame_start
+        # protocol displayed the buffer being overwritten for up to a scan frame every
+        # DPI frame — the 16-row-banded tearing seen on the wall 2026-07-29.
+        H = 2 * S * N
+        y_done = Signal()
+        y_done_r = Signal()
+        m.d.comb += y_done.eq(self.wr_y >= H)
+        m.d.pix += y_done_r.eq(y_done)
+        with m.If(y_done & ~y_done_r):
+            m.d.pix += producer_toggle.eq(~producer_toggle)
 
         chain = self.wr_y // (2 * S)
         half = (self.wr_y % (2 * S)) // S
