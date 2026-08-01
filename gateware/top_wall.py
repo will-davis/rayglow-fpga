@@ -24,12 +24,20 @@ from amaranth import (Cat, ClockDomain, ClockSignal, DomainRenamer, Elaboratable
 from amaranth.build import Attrs, Pins, Resource, Subsignal
 from amaranth.lib.cdc import FFSynchronizer
 
-from .pll import PLL12to60
+from .pll import PLL12to40, PLL12to48, PLL12to60
 from .platform import ECP5EVNPlatform
 from .translator import DpiToHub75
 
 NUM_CHAINS = 4          # 2 = one HAT (384x64, first bring-up); 4 = two HATs (full wall)
 WIDTH, SCAN = 384, 16
+
+# Shift-clock SI experiment knobs (2026-08-01). The SI cliff sits between 20 MHz shift
+# (40 MHz scan, proven clean) and 30 MHz (60 MHz scan, cascading skew from ~panel 3).
+# SCAN_PLL picks the scan clock; WALL_SLEW picks the output edge rate into the HATs —
+# "SLOW" was a leftover from unbuffered direct-drive; "FAST" buys timing margin at the
+# '245 inputs (Will's 22R-made-it-worse datum says the edges were already too lazy).
+SCAN_PLL = PLL12to48    # refresh @ B=11/U=8/splits: 60 MHz->175.5 Hz, 48->140.4, 40->117.0
+WALL_SLEW = "SLOW"
 
 # Per-chain RGB balls (R1 G1 B1 R2 G2 B2). Chains 0-2 on J32, chain 3 on J33.
 CHAIN_RGB = [
@@ -61,7 +69,7 @@ class Top(Elaboratable):
         # over 4-panel chains; this is 30 over 6. Refresh 117.9 -> 176.9 Hz at identical
         # brightness/duty. Watch for the color-bleed-to-white SI signature + D9-D11; the
         # fallback is PLL12to40 (one line).
-        m.submodules.pll = PLL12to60(domain="scan")
+        m.submodules.pll = SCAN_PLL(domain="scan")
 
         # overlap=True + slot-major schedule with MSB subfield splitting: plane 10 shows
         # as 4 quarter-slots and plane 9 as 2 halves, spread across the sweep — 75 % of
@@ -120,6 +128,6 @@ if __name__ == "__main__":
                  Subsignal("clk", Pins(CLK_BALL, dir="o")),
                  Subsignal("lat", Pins(LAT_BALL, dir="o")),
                  Subsignal("oe", Pins(OE_BALL, dir="o")),
-                 Attrs(IO_TYPE="LVCMOS33", DRIVE="8", SLEWRATE="SLOW")),
+                 Attrs(IO_TYPE="LVCMOS33", DRIVE="8", SLEWRATE=WALL_SLEW)),
     ])
     plat.build(Top(), do_program=False)

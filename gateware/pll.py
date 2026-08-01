@@ -76,6 +76,10 @@ def PLL12to60(domain="fast"):
     return EcpPll(domain=domain, out_mhz=60, clki_div=1, clkfb_div=5, clkop_div=10, cphase=4)
 
 
+def PLL12to48(domain="scan"):
+    return EcpPll(domain=domain, out_mhz=48, clki_div=1, clkfb_div=4, clkop_div=12, cphase=5)
+
+
 def PLL12to40(domain="scan"):
     return EcpPll(domain=domain, out_mhz=40, clki_div=3, clkfb_div=10, clkop_div=15, cphase=7)
 
