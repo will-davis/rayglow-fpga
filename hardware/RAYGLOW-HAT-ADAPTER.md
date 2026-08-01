@@ -101,9 +101,17 @@ cd ~/rayglow; and uv run python -m rayglow.render <shader.glsl> \
 
 ## Hardware brightness knob (SW5 positions 1–4)
 
-4-bit code, position 1 = LSB. **All OFF = default brightness (unit 8, ~118 Hz).**
-Any other pattern = `unit` 1–15 directly: 1 ≈ 12 % (fastest refresh) … 8 = 100 % …
-15 ≈ 190 % (71.8 Hz). Change anytime; takes effect within a frame.
+4-bit code, position 1 = LSB. **All OFF = default brightness (unit 8, 140.4 Hz at the
+48 MHz production clock).** Any other pattern = `unit` 1–15 directly: 1 ≈ 12 %
+(247 Hz) … 8 = 100 % (140 Hz) … 15 ≈ 190 % (86 Hz). Change anytime; takes effect
+within a frame. Dimmer = faster refresh, brighter = slower.
+
+## Shift-clock ceiling (measured 2026-08-01)
+
+24 MHz shift (48 MHz scan) is clean end to end through jumpers → HATs → 6-panel
+chains; 30 MHz cascades skew from ~panel 3 on every chain, and output slew rate makes
+no difference (the head-end timing budget, not edge rate, is the limit). Pushing past
+24 MHz requires interconnect work — terminated backplane/mezzanine — not settings.
 
 ## Bring-up notes
 

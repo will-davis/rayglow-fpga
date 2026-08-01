@@ -259,6 +259,17 @@ stable for hours, no visible SI artifacts at viewing distance.
       DpiToHub75 and wired to **SW5 positions 1–4** (4-bit, FFSync'd into scan domain):
       all OFF = default 8; else the value 1–15 directly (≈12 %–190 %; dimmer = faster
       refresh, brighter = slower, 71.8 Hz at 15). In SRAM + flash.
+- [x] **SEAMS ELIMINATED — production config settled (2026-08-01):** 48 MHz scan
+      (24 MHz shift) + overlap + MSB subfield splitting ({9:2, 10:4}) + B=11 + knob =
+      **140.4 Hz refresh, ~560 Hz effective motion sampling, full brightness, clean end
+      to end, "no streaking, looks great."** In flash; self-boots.
+      **Shift-clock SI cliff MEASURED:** 24 MHz clean / 30 MHz cascades skew from ~panel
+      3 on all chains; FAST vs SLOW slew = zero difference (head-end timing budget, not
+      edge rate — Will's matched-jumper work holds the margin at 24). The A/B ran as
+      SRAM loads (`/tmp/top_fast60.bit` vs `/tmp/top_slow50.bit` on the Pi). Going
+      faster = interconnect work (terminated backplane/mezzanine HAT, the planned
+      separate session), not settings. Note: ecppll "50 MHz" from a 12 MHz ref actually
+      locks at 48 (integer feedback) — preset named PLL12to48 honestly.
 - [ ] Optional: 120 Hz DPI mode; temporal dithering; per-chain diagnostics counters
       readable over the debug UART/I²C
 

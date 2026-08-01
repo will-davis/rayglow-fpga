@@ -31,11 +31,11 @@ from .translator import DpiToHub75
 NUM_CHAINS = 4          # 2 = one HAT (384x64, first bring-up); 4 = two HATs (full wall)
 WIDTH, SCAN = 384, 16
 
-# Shift-clock SI experiment knobs (2026-08-01). The SI cliff sits between 20 MHz shift
-# (40 MHz scan, proven clean) and 30 MHz (60 MHz scan, cascading skew from ~panel 3).
-# SCAN_PLL picks the scan clock; WALL_SLEW picks the output edge rate into the HATs —
-# "SLOW" was a leftover from unbuffered direct-drive; "FAST" buys timing margin at the
-# '245 inputs (Will's 22R-made-it-worse datum says the edges were already too lazy).
+# Shift-clock SI cliff — MEASURED 2026-08-01 on the jumper->HAT->6-panel interconnect:
+# 24 MHz shift (48 MHz scan) clean end to end; 30 MHz (60 MHz scan) cascades skew from
+# ~panel 3 on every chain. Slew is NOT the limiter: FAST vs SLOW made zero difference,
+# so the failure is the head-end timing budget, not edge rate. Production = 48/SLOW.
+# Going faster someday needs interconnect work (terminated backplane/mezzanine), not knobs.
 SCAN_PLL = PLL12to48    # refresh @ B=11/U=8/splits: 60 MHz->175.5 Hz, 48->140.4, 40->117.0
 WALL_SLEW = "SLOW"
 
@@ -65,17 +65,15 @@ class Top(Elaboratable):
         # each side. LED D11 (line_err) latches if any malformed line is ever captured.
         m.domains.pix = ClockDomain("pix")
         m.d.comb += ClockSignal("pix").eq(~dpi.pclk.i)
-        # 60 MHz scan -> 30 MHz HUB75 shift. Precedent: these HATs ran v1 at 37.5 MHz
-        # over 4-panel chains; this is 30 over 6. Refresh 117.9 -> 176.9 Hz at identical
-        # brightness/duty. Watch for the color-bleed-to-white SI signature + D9-D11; the
-        # fallback is PLL12to40 (one line).
+        # Scan clock from SCAN_PLL (see the measured-cliff note at the constants above).
         m.submodules.pll = SCAN_PLL(domain="scan")
 
         # overlap=True + slot-major schedule with MSB subfield splitting: plane 10 shows
         # as 4 quarter-slots and plane 9 as 2 halves, spread across the sweep — 75 % of
-        # each pixel's light arrives ~4x per frame (effective motion sampling ~700 Hz)
-        # for ~0.7 % refresh cost: ~175.5 Hz at 77 % duty, full brightness. The 16-row
-        # motion seam is scan physics; this shrinks its amplitude by ~the split factor.
+        # each pixel's light arrives ~4x per frame (effective motion sampling ~560 Hz at
+        # the 48 MHz production clock) for ~0.7 % refresh cost: 140.4 Hz at 77 % duty,
+        # full brightness. The 16-row motion seam is scan physics; splits + refresh put
+        # it below visibility (confirmed on the wall 2026-08-01).
         tr = DpiToHub75(width=WIDTH, scan=SCAN, chains=NUM_CHAINS, planes=11, unit=8,
                         unit_max=16, guard=40, overlap=True, splits={9: 2, 10: 4},
                         vsync_active=1, max_w=1024, max_h=1024,
