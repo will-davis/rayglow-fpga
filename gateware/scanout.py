@@ -22,7 +22,7 @@ Pin polarity: `blank` drives the panel's OE pin directly (OE is active LOW:
 blank=1 -> LEDs off). LED-on time is therefore the cycles blank==0.
 """
 
-from amaranth import Elaboratable, Module, Signal
+from amaranth import Array, Elaboratable, Module, Signal
 from amaranth.lib.memory import Memory
 
 from .patterns import cie1931_lut
@@ -30,13 +30,24 @@ from .patterns import cie1931_lut
 
 class Hub75Core(Elaboratable):
     def __init__(self, *, width, scan=16, chains=1, planes=10, unit=4, unit_max=None,
-                 guard=0, overlap=False, banks_init=None, lut_init=None, external_fb=False):
+                 guard=0, overlap=False, splits=None, banks_init=None, lut_init=None,
+                 external_fb=False):
         self.width = width
         self.scan = scan
         self.chains = chains
         self.planes = planes
         self.guard = guard            # blanked settle cycles between LATCH and DISPLAY
         self.overlap = overlap        # v2 engine: shift plane b+1 WHILE displaying plane b
+        # splits: {plane: n} subdivides plane's display into n equal sub-slots (n a power
+        # of two, n <= 2**plane) spread across the sweep — subfield splitting. Each row's
+        # light in that plane arrives n times per frame instead of once, multiplying the
+        # perceived motion-sampling rate of the brightest content at ~zero time cost
+        # (display-bound slots only pay the extra latch+guard). Overlap engine only.
+        self.splits = splits or {}
+        assert not self.splits or overlap, "splits requires the overlap engine"
+        for p, n in self.splits.items():
+            assert n & (n - 1) == 0 and n <= (1 << p), f"split {n} of plane {p} invalid"
+        self.schedule = self._build_schedule(planes, self.splits)
         self._unit_max = unit_max if unit_max is not None else unit
         self.banks_init = banks_init or [[[], []] for _ in range(chains)]
         self.lut_init = lut_init or cie1931_lut(planes)
@@ -59,6 +70,22 @@ class Hub75Core(Elaboratable):
         self.addr = Signal(range(scan))      # row address A..D
         self.rgb = Signal(6 * chains)        # per chain: [R1 G1 B1 R2 G2 B2]
         self.frame = Signal()                # 1-cycle pulse per completed frame
+
+    @staticmethod
+    def _build_schedule(planes, splits):
+        """Slot list [(plane, dur_shift)] with duration = unit << dur_shift, ordered so
+        repeated sub-slots spread across the sweep. Sub-slot i of an n-way split sits at
+        fractional position (i+0.5)/n; unsplit plane p at (p+0.5)/planes — merging the
+        two orderings interleaves LSB singles between the recurring MSB sub-slots."""
+        slots = []
+        for p in range(planes):
+            n = splits.get(p, 1)
+            shift = p - (n.bit_length() - 1)          # duration 2^p split n ways
+            for i in range(n):
+                pos = (i + 0.5) / n if n > 1 else (p + 0.5) / planes
+                slots.append((pos, p, shift))
+        slots.sort()
+        return [(p, sh) for _, p, sh in slots]
 
     def elaborate(self, platform):
         m = Module()
@@ -180,16 +207,19 @@ class Hub75Core(Elaboratable):
         guarantee the gap). Cold start: disp_valid=0 blanks the first RUN (shift only).
         """
         W, S, B = self.width, self.scan, self.planes
+        sched = self.schedule                          # [(plane, dur_shift)] slot list
+        L = len(sched)
+        SCHED_PLANE = Array(p for p, _ in sched)
+        SCHED_SHIFT = Array(sh for _, sh in sched)
 
         s_row = Signal(range(S))      # shift side: row being loaded
-        s_plane = Signal(range(B))    # shift side: plane being loaded
-        d_plane = Signal(range(B))    # display side: plane on the output latches
+        s_idx = Signal(range(L))      # shift side: schedule slot being loaded
         disp_valid = Signal()         # latches hold real data (0 only at cold start)
         shifting = Signal(init=1)     # cold start: shift (0,0) first, never latch garbage
         sc = Signal(range(2 * W + 2))                 # 2 prime cycles + 2W slot cycles
         rel = Signal(range(2 * W))
 
-        m.d.comb += [read_row.eq(s_row), sel_plane.eq(s_plane), rel.eq(sc - 2)]
+        m.d.comb += [read_row.eq(s_row), sel_plane.eq(SCHED_PLANE[s_idx]), rel.eq(sc - 2)]
         shift_done_now = shifting & (sc == 2 * W + 1)
 
         with m.FSM():
@@ -214,22 +244,26 @@ class Hub75Core(Elaboratable):
                 m.d.comb += self.lat.eq(1)
                 m.d.sync += [
                     self.addr.eq(s_row),              # display row follows (blanked now)
-                    d_plane.eq(s_plane),
                     disp_valid.eq(1),
-                    disp.eq(self.unit << s_plane),    # duration of the plane just latched
+                    disp.eq(self.unit << SCHED_SHIFT[s_idx]),  # just-latched slot's length
                     sc.eq(0),
-                    shifting.eq(1),                   # next plane's shift starts post-guard
+                    shifting.eq(1),                   # next slot's shift starts post-guard
                 ]
-                # advance the shift pointer; frame pulse as the shifter wraps to (0,0) —
-                # the double buffer swaps while the old frame's last plane displays.
-                with m.If(s_plane == B - 1):
-                    m.d.sync += s_plane.eq(0)
-                    with m.If(s_row == S - 1):
-                        m.d.sync += [s_row.eq(0), self.frame.eq(1)]
+                # Advance SLOT-MAJOR over the schedule (all rows at slot k, then all rows
+                # at k+1): plane-distribution + MSB subfield splitting — each row's light
+                # arrives once per schedule slot instead of one burst per sweep. Same
+                # total time and lit-time per pixel (golden sims are order-agnostic); the
+                # win is perceptual: flicker/tracking shear drops with slot rate. Frame
+                # pulse as the shifter wraps to (0,0) — the double buffer swaps while the
+                # old frame's last slot displays.
+                with m.If(s_row == S - 1):
+                    m.d.sync += s_row.eq(0)
+                    with m.If(s_idx == L - 1):
+                        m.d.sync += [s_idx.eq(0), self.frame.eq(1)]
                     with m.Else():
-                        m.d.sync += s_row.eq(s_row + 1)
+                        m.d.sync += s_idx.eq(s_idx + 1)
                 with m.Else():
-                    m.d.sync += s_plane.eq(s_plane + 1)
+                    m.d.sync += s_row.eq(s_row + 1)
                 if self.guard:
                     m.d.sync += guard_cnt.eq(self.guard - 1)
                     m.next = "GUARD"

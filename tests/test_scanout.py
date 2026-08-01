@@ -23,7 +23,7 @@ def channel(pix, ch):
     return (pix >> (16 - 8 * ch)) & 0xFF
 
 
-def run_frame_and_check(chains, unit_drive=None, guard=0, overlap=False):
+def run_frame_and_check(chains, unit_drive=None, guard=0, overlap=False, splits=None):
     W, S, B, U = 8, 2, 3, 2
     eff = unit_drive if unit_drive is not None else U
     imgs = [counting(W, 2 * S) for _ in range(chains)]
@@ -31,7 +31,7 @@ def run_frame_and_check(chains, unit_drive=None, guard=0, overlap=False):
         img[0][0] = (17 * (c + 1)) << 16
     dut = Hub75Core(
         width=W, scan=S, chains=chains, planes=B, unit=U, unit_max=8, guard=guard,
-        overlap=overlap,
+        overlap=overlap, splits=splits,
         banks_init=[banks_from_image(img, W, S) for img in imgs], lut_init=LUT3,
     )
     sim = Simulator(dut)
@@ -124,6 +124,22 @@ def test_overlap_golden_frame_two_chains_guarded():
 
 def test_overlap_runtime_unit():
     run_frame_and_check(chains=1, overlap=True, unit_drive=5)
+
+
+def test_subfield_splits_preserve_littime():
+    # Splitting the MSB into sub-slots must not change any pixel's total lit-time.
+    run_frame_and_check(chains=1, overlap=True, guard=2, splits={2: 2})
+
+
+def test_schedule_builder():
+    # B=3, split plane 2 into 2: slots = plane 2 twice at half duration + planes 0,1 once,
+    # with the sub-slots spread (one before the singles cluster region, one after).
+    sched = Hub75Core._build_schedule(3, {2: 2})
+    assert sorted(sched) == [(0, 0), (1, 1), (2, 1), (2, 1)]
+    subs = [i for i, s in enumerate(sched) if s == (2, 1)]
+    assert subs[1] - subs[0] > 1, f"sub-slots adjacent, not spread: {sched}"
+    # No splits: identity schedule in plane order.
+    assert Hub75Core._build_schedule(3, {}) == [(0, 0), (1, 1), (2, 2)]
 
 
 def test_overlap_is_faster():

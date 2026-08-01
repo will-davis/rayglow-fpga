@@ -24,7 +24,7 @@ from amaranth import (Cat, ClockDomain, ClockSignal, DomainRenamer, Elaboratable
 from amaranth.build import Attrs, Pins, Resource, Subsignal
 from amaranth.lib.cdc import FFSynchronizer
 
-from .pll import PLL12to40
+from .pll import PLL12to60
 from .platform import ECP5EVNPlatform
 from .translator import DpiToHub75
 
@@ -57,14 +57,20 @@ class Top(Elaboratable):
         # each side. LED D11 (line_err) latches if any malformed line is ever captured.
         m.domains.pix = ClockDomain("pix")
         m.d.comb += ClockSignal("pix").eq(~dpi.pclk.i)
-        m.submodules.pll = PLL12to40(domain="scan")     # 20 MHz HUB75 shift
+        # 60 MHz scan -> 30 MHz HUB75 shift. Precedent: these HATs ran v1 at 37.5 MHz
+        # over 4-panel chains; this is 30 over 6. Refresh 117.9 -> 176.9 Hz at identical
+        # brightness/duty. Watch for the color-bleed-to-white SI signature + D9-D11; the
+        # fallback is PLL12to40 (one line).
+        m.submodules.pll = PLL12to60(domain="scan")
 
-        # overlap=True: shift plane b+1 while displaying plane b. B=11 planes at unit=8
-        # keeps the B=10/unit=16 total brightness with 2x finer dark-end resolution:
-        # ~117.9 Hz at 77.2 % duty, cadence ~1.97x the 60 Hz source.
+        # overlap=True + slot-major schedule with MSB subfield splitting: plane 10 shows
+        # as 4 quarter-slots and plane 9 as 2 halves, spread across the sweep — 75 % of
+        # each pixel's light arrives ~4x per frame (effective motion sampling ~700 Hz)
+        # for ~0.7 % refresh cost: ~175.5 Hz at 77 % duty, full brightness. The 16-row
+        # motion seam is scan physics; this shrinks its amplitude by ~the split factor.
         tr = DpiToHub75(width=WIDTH, scan=SCAN, chains=NUM_CHAINS, planes=11, unit=8,
-                        unit_max=16, guard=40, overlap=True, vsync_active=1,
-                        max_w=1024, max_h=1024,
+                        unit_max=16, guard=40, overlap=True, splits={9: 2, 10: 4},
+                        vsync_active=1, max_w=1024, max_h=1024,
                         expect_dpi_w=WIDTH)             # DPI hactive == wall width (384)
         m.submodules.tr = DomainRenamer({"sync": "scan"})(tr)
 
