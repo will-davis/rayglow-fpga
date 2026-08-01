@@ -1,4 +1,5 @@
 
+
 # rayglow-fpga
 
 #### ECP5 FPGA translation layer for the rayglow LED wall
@@ -29,6 +30,9 @@ ECP5-EVN (LFE5UM5G-85F): DPI capture ─▶ double-buffered EBR framebuffer
                      │ 2× RayGLow RP2350 HATs, 74AHCT245 (3.3→5 V)
 4 chains × 6 panels (384×32 strips) — HUB75 1/16 scan, no serpentine
 ```
+<img width="2285" height="1539" alt="Screenshot_20260801_120810" src="https://github.com/user-attachments/assets/5c180a4e-182c-404f-a28c-46c68e8f38fc" />
+
+
 
 ## Layout
 - `gateware/` — Amaranth HDL (uv project, root pyproject.toml)
@@ -41,6 +45,10 @@ ECP5-EVN (LFE5UM5G-85F): DPI capture ─▶ double-buffered EBR framebuffer
   `P6-3528-64X32-16S-HL11/` (bench panel), `ethernet-adapter/` (parked parts stash)
 - `will-notes.md` — Will's inbox to the agent
 - `tools/` — verification scripts
+
+
+https://github.com/user-attachments/assets/f4a625f3-4165-425e-9898-ecad7a16b5f1
+
 
 ## Quick start
 ```fish
