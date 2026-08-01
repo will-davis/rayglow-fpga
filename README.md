@@ -1,15 +1,23 @@
 # rayglow-fpga
 
-> Read first — human orientation. Agent guidance is in CLAUDE.md.
+#### ECP5 FPGA translation layer for the rayglow LED wall
 
-ECP5 FPGA translation layer for the rayglow LED wall: Raspberry Pi 5 **DPI video in**,
+This project was built separate from, but in addition to the rayglow project. This was an 
+exercise to learn about interacting with, programming, and implementing FPGAs. I have always
+wanted to learn more about these cool gizmos and finally had the perfect excuse to do so.
+This was a project to learn, but may include worthwhile code or information that can
+be used by others if they are interested in the similar setups.
+
+---
+
+Raspberry Pi 5 **DPI video in**,
 parallel **HUB75 BCM scan-out** to the 24-panel (384×128) wall v2. The Pi treats the wall
-as a monitor; the FPGA turns a video signal into panel drive. Sister project to
+as a monitor and the FPGA turns a video signal into panel drive. Sister project to
 `~/Projects/rayglow` (renderer + RP2350 path, which keeps working untouched); the boundary
-between the two repos is INTERFACE-CONTRACT.md, which lives here.
+between the two repos is INTERFACE-CONTRACT.md.
 
 ```
-will-desktop ──UDP :5005 (audio features, unchanged)──▶
+pc-desktop ──UDP :5005 (audio features, unchanged)──▶
 Pi 5: rayglow renderer (GLSL/EGL, unchanged) ──▶ KMS DPI out, GPIO0–27
         RGB888 + PCLK/DE/syncs, custom modeline 12.5 MHz @ 60 Hz
                      │ 40-pin ribbon to JP8
@@ -18,21 +26,6 @@ ECP5-EVN (LFE5UM5G-85F): DPI capture ─▶ double-buffered EBR framebuffer
                      │ 2× RayGLow RP2350 HATs, 74AHCT245 (3.3→5 V)
 4 chains × 6 panels (384×32 strips) — HUB75 1/16 scan, no serpentine
 ```
-
-**Why:** wall v2's 2×12-panel serpentine chains hit signal-integrity limits (only 4-deep
-was ever validated). Shorter chains need more parallel outputs than an RP2350 has; the
-FPGA provides them, deletes the readback→pack→transport pipeline entirely (rendering *is*
-sending), and lifts the RP2350's SRAM ceiling — 384×128×24 bpp double-buffers in 2.25 Mbit
-of the 85F's 3.74 Mbit EBR, no external RAM. And it's the excuse to finally learn FPGAs.
-
-## Status
-- **2026-08-01: COMPLETE — the wall is in production.** 384×128 across 24 panels, four
-  chains, 140.4 Hz refresh (~560 Hz effective motion sampling via MSB subfield
-  splitting), 11-bit BCM, hardware brightness knob, boots itself from SPI flash,
-  reflashes over SSH. Phases 0–4 in 25 days; the full build story — including every bug,
-  dead end, and the signal-integrity hunt — is in
-  `docs/design-history/2026-08-01-claude-session-fpga-wall-build.md`.
-- 2026-07-18: project created.
 
 ## Layout
 - `gateware/` — Amaranth HDL (uv project, root pyproject.toml)
@@ -57,16 +50,6 @@ Bitstream builds additionally need yosys/nextpnr-ecp5/ecppack/openFPGALoader on 
 uv run python -m gateware.top_blinky
 openFPGALoader -b ecp5_evn build/top.bit
 ```
-
-## Design decisions
-| Date | Decision | Why |
-|---|---|---|
-| 2026-07-18 | HDL = **Amaranth** | Python-native (uv, pytest sims, can cross-check against rayglow's numpy golden frames); transparent — emits RTLIL through yosys, generated Verilog inspectable; removes Verilog footguns while learning the same concepts |
-| 2026-07-18 | Ingest = **Pi 5 DPI** via JP8, not HDMI/TMDS or the 4-lane PIO protocol | JP8 carries all 28 Pi GPIOs = the full DPI interface; deletes Pi-side readback/pack/transport; ~3.5 MHz PCLK is bench-scope-visible; TMDS RX is a poor first FPGA project. PIO protocol remains the fallback |
-| 2026-07-18 | Topology = **4 chains × 6 panels**, chain count parametric in gateware | 384-px strips ≈ 500 Hz shift-bound refresh floor vs 143 Hz today; 6-deep ≈ the validated-SI regime; 8×3 is the escape hatch |
-| 2026-07-18 | Level shifting on **identical, modular 2-chain wing boards** (build 2 now, 2 more = 8 chains) | PCB lead time; one design, reorder to expand. Rules + pin budget: hardware/WING-BOARD.md |
-| 2026-07-18 | **Ethernet adapter parked** (KSZ9031 stash in `.reference/ethernet-adapter/`) | The Pi stays regardless (renderer + audio feed live there); hand-soldered RGMII debugged blind on a 10 MHz scope is a chore with zero benefit over the header that's already there |
-| 2026-07-18 | Gamma owned by the **FPGA** (8-bit perceptual in → 12-bit BCM LUT) | Monitor semantics for the Pi; recovers the shadow resolution the 8-bit-baked-gamma path loses today |
 
 ## License
 
