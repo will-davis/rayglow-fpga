@@ -1,3 +1,4 @@
+
 # rayglow-fpga
 
 #### ECP5 FPGA translation layer for the rayglow LED wall
@@ -9,6 +10,8 @@ This was a project to learn, but may include worthwhile code or information that
 be used by others if they are interested in the similar setups.
 
 ---
+
+<img width="2520" height="1005" alt="20260801_115922" src="https://github.com/user-attachments/assets/ef977431-52c5-4bef-aa4b-bd640244e8ba" />
 
 Raspberry Pi 5 **DPI video in**,
 parallel **HUB75 BCM scan-out** to the 24-panel (384×128) wall v2. The Pi treats the wall
