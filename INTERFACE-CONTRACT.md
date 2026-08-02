@@ -5,6 +5,12 @@
 changes bump the version and are noted in both repos' status logs. Items marked
 ⚠ VERIFY are provisional until bring-up pins them.
 
+**v0.2-exp (2026-08-02, branch `exp/120hz-dpi`).** Adds §2a: the as-built 60 Hz mode and
+the experimental ≥100 Hz DPI modes. Gateware guarantee strengthened: the framebuffer
+handoff is now skip-gated — tear-free at ANY modeline; a scan too slow for the source
+drops whole source frames instead (EVN LED D8 lights per drop). Ratifies to v0.2 when
+the experiment lands on main.
+
 ## 1. Physical link
 - Pi 5 40-pin header ↔ ECP5-EVN **JP8**, short 40-pin ribbon (all 28 GPIOs land in FPGA
   bank 3, 3.3 V — UG Table 5.7). No power sharing: Pi, EVN (12 V), and wall PSUs are
@@ -22,8 +28,34 @@ changes bump the version and are noted in both repos' status logs. Items marked
   exact PCLK the RP1 divider achieves; contract pins the *geometry*, tolerates PCLK drift.
 - Pi config (`/boot/firmware/config.txt`):
   `dtoverlay=vc4-kms-dpi-generic,rgb888,clock-frequency=3500000,hactive=384,hfp=8,hsync=16,hbp=8,vactive=128,vfp=4,vsync=4,vbp=4`
-- FPGA captures on PCLK rising edge, qualifies with DE; frame boundary = VSYNC. Buffer
-  swap on VSYNC ⇒ latency ≤ 1 frame, no tearing. 120 Hz is a future minor bump.
+- FPGA captures on the PCLK **falling** edge (mid-eye at ≥12.5 MHz; the RP1 drives on the
+  rising edge), qualifies with DE; frame boundary = VSYNC. Double-buffer handoff is
+  skip-gated (§2a) ⇒ latency ≤ 1 source frame, tearing structurally impossible.
+
+## 2a. As-built + high-rate modes (v0.2-exp)
+
+The RP1-DPI/KMS driver clamps `vactive` to 480 (asked 128, got 384×480) — the FPGA
+captures rows 0–127 and drops the rest, which conveniently makes capture a small slice
+of the frame. Geometry as driven: htotal 416 (384 + 8/16/8), vtotal 492 (480 + 4/4/4).
+The contract pins geometry; the FPGA is modeline-agnostic (DE/VSYNC-derived), so mode
+changes are **config.txt-only** — same gateware bitstream throughout.
+
+| Mode | `clock-frequency=` | Source rate | At scan 140.4 Hz (SW5 dflt u=8) |
+|---|---|---|---|
+| Production 60 Hz | 12500000 | 61.07 Hz | zero drops (budget 12.1 ms ≫ 7.1 ms sweep) |
+| **~122 Hz (experiment)** | 25000000 | 122.14 Hz | ~15 % drops → ~104 unique fps shown |
+| ~100 Hz (zero-drop fallback) | 20500000 | 100.2 Hz | zero drops at full brightness |
+| True 120 Hz (SI experiment) | 45100000 + vfp=416 | 120.0 Hz | zero drops; PCLK 45 MHz on the ribbon — unverified SI |
+
+Drop math (gateware `double_buffer.py`): a source frame is consumed iff the scan sweep
+ends within `DPI_period − capture_time` of the previous consumption; capture_time =
+128·htotal/PCLK (2.13 ms at 25 MHz). Sweep = 1/refresh. The SW5 brightness knob also
+scales refresh, so it doubles as the cadence knob at 122 Hz: **SW5=6 → 171.2 Hz scan,
+sweep 5.84 ms < 6.06 ms budget → ZERO drops at 91.5 % of default brightness** (dimmer
+u is faster; duty falls slower than u). SW5=8 keeps full brightness and accepts ~15 %
+irregular drops. Every displayed sweep is always exactly one source frame regardless.
+- The renderer needs no changes: `drm_out` paces on page-flip events, so it follows
+  whatever rate the mode advertises (122 fps render ≈ 0.2 ms/frame, trivial).
 
 ## 3. Pixel format & gamma ownership
 - Pi sends **display-referred 8-bit/channel RGB** — exactly what a monitor would get. In
