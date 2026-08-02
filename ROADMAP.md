@@ -270,8 +270,10 @@ stable for hours, no visible SI artifacts at viewing distance.
       faster = interconnect work (terminated backplane/mezzanine HAT, the planned
       separate session), not settings. Note: ecppll "50 MHz" from a 12 MHz ref actually
       locks at 48 (integer feedback) — preset named PLL12to48 honestly.
-- [ ] **120 Hz DPI mode — EXPERIMENTAL, branch `exp/120hz-dpi` (2026-08-02), awaiting
-      wall test.** The blocker was the handoff constraint (scan_frame < DPI_period −
+- [x] **120 Hz DPI mode — CONFIRMED ON THE WALL 2026-08-02** ("end to end full
+      rendering, looks fantastic" — Will; ~120 fps was the original target, pulled back
+      only for SI, and the SI work since made it reachable). The blocker was the
+      handoff constraint (scan_frame < DPI_period −
       capture_time: 7.1 ms vs ~6.1 ms at 122 Hz → the 16-row mixing would return). Fixed
       structurally in `double_buffer.py`: the reader's `front` crosses BACK to the writer
       (1 bit, FFSync — mirror of the forward toggle) and the writer captures only when
@@ -280,11 +282,15 @@ stable for hours, no visible SI artifacts at viewing distance.
       LED **D8** (dark = consuming everything). Constraint note in double_buffer.py
       retired; sim `test_slow_reader_drops_frames_never_tears` locks the regime in.
       Pi-side is config.txt-only (same bitstream): `clock-frequency=25000000` → 122.14 Hz.
-      Cadence table + knob interaction in INTERFACE-CONTRACT §2a — headline: **SW5=6
-      scans at 171.2 Hz and consumes all 122 fps with zero drops at 91.5 % brightness**
-      (recommended first test); SW5=8 = full brightness, ~15 % irregular drops (~104
-      unique fps). Zero-drop alternates: ~100 Hz at 20.5 MHz, or true 120 Hz via padded
-      vtotal (PCLK 45 MHz — SI experiment, matched-jumper margin unknown).
+      Cadence table + knob interaction in INTERFACE-CONTRACT §2a (v0.2, ratified) and
+      the full per-setting table in hardware/SWITCHES-AND-LEDS.md — headline: **SW5=6
+      scans at 171.2 Hz and consumes all 122 fps with zero drops at 91.5 % brightness**;
+      SW5=8 = full brightness, ~15 % irregular drops (~104 unique fps). Zero-drop
+      alternates: ~100 Hz at 20.5 MHz, or true 120 Hz via padded vtotal (PCLK 45 MHz —
+      SI experiment, matched-jumper margin unknown; FPGA pix timing already clears it,
+      Fmax 85.6 MHz). ⚠ Until the new bitstream is in SPI flash, keep in mind a power
+      cycle boots the OLD gateware into the 25 MHz mode → 16-row mixing returns until
+      reflash (`openFPGALoader -b ecp5_evn -f --unprotect-flash`).
 - [ ] Optional: temporal dithering; per-chain diagnostics counters readable over the
       debug UART/I²C
 

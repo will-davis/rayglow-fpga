@@ -23,7 +23,7 @@ between the two repos is INTERFACE-CONTRACT.md.
 ```
 pc-desktop ──UDP :5005 (audio features, unchanged)──▶
 Pi 5: rayglow renderer (GLSL/EGL, unchanged) ──▶ KMS DPI out, GPIO0–27
-        RGB888 + PCLK/DE/syncs, custom modeline 12.5 MHz @ 60 Hz
+        RGB888 + PCLK/DE/syncs, custom modeline 25 MHz @ 122 Hz
                      │ 40-pin ribbon to JP8
 ECP5-EVN (LFE5UM5G-85F): DPI capture ─▶ double-buffered EBR framebuffer
         swap on VSYNC ─▶ gamma LUT 8→12-bit ─▶ BCM scan-out engine
@@ -36,7 +36,8 @@ https://github.com/user-attachments/assets/f4a625f3-4165-425e-9898-ecad7a16b5f1
 ## Layout
 - `gateware/` — Amaranth HDL (uv project, root pyproject.toml)
 - `tests/` — simulation testbenches (`uv run pytest` — no system toolchain needed)
-- `hardware/` — topic docs (current truth): HAT adapter wiring, wing-board design record
+- `hardware/` — topic docs (current truth): HAT adapter wiring, wing-board design
+  record, switch/LED operator reference (SWITCHES-AND-LEDS.md)
 - `INTERFACE-CONTRACT.md` — the rayglow ↔ rayglow-fpga boundary (versioned)
 - `ROADMAP.md` — phased plan with acceptance criteria
 - `docs/design-history/` — superseded docs; current docs win

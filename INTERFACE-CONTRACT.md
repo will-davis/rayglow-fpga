@@ -5,11 +5,11 @@
 changes bump the version and are noted in both repos' status logs. Items marked
 ⚠ VERIFY are provisional until bring-up pins them.
 
-**v0.2-exp (2026-08-02, branch `exp/120hz-dpi`).** Adds §2a: the as-built 60 Hz mode and
-the experimental ≥100 Hz DPI modes. Gateware guarantee strengthened: the framebuffer
-handoff is now skip-gated — tear-free at ANY modeline; a scan too slow for the source
-drops whole source frames instead (EVN LED D8 lights per drop). Ratifies to v0.2 when
-the experiment lands on main.
+**v0.2 (2026-08-02).** Adds §2a: the as-built 60 Hz mode and the ≥100 Hz DPI modes;
+**122.14 Hz is now the production source rate** (confirmed end-to-end on the wall,
+2026-08-02). Gateware guarantee strengthened: the framebuffer handoff is skip-gated —
+tear-free at ANY modeline; a scan too slow for the source drops whole source frames
+instead (EVN LED D8 lights per drop; hardware/SWITCHES-AND-LEDS.md).
 
 ## 1. Physical link
 - Pi 5 40-pin header ↔ ECP5-EVN **JP8**, short 40-pin ribbon (all 28 GPIOs land in FPGA
@@ -32,7 +32,7 @@ the experiment lands on main.
   rising edge), qualifies with DE; frame boundary = VSYNC. Double-buffer handoff is
   skip-gated (§2a) ⇒ latency ≤ 1 source frame, tearing structurally impossible.
 
-## 2a. As-built + high-rate modes (v0.2-exp)
+## 2a. As-built + high-rate modes (v0.2)
 
 The RP1-DPI/KMS driver clamps `vactive` to 480 (asked 128, got 384×480) — the FPGA
 captures rows 0–127 and drops the rest, which conveniently makes capture a small slice
@@ -42,8 +42,8 @@ changes are **config.txt-only** — same gateware bitstream throughout.
 
 | Mode | `clock-frequency=` | Source rate | At scan 140.4 Hz (SW5 dflt u=8) |
 |---|---|---|---|
-| Production 60 Hz | 12500000 | 61.07 Hz | zero drops (budget 12.1 ms ≫ 7.1 ms sweep) |
-| **~122 Hz (experiment)** | 25000000 | 122.14 Hz | ~15 % drops → ~104 unique fps shown |
+| 60 Hz (retired baseline) | 12500000 | 61.07 Hz | zero drops (budget 12.1 ms ≫ 7.1 ms sweep) |
+| **~122 Hz (PRODUCTION)** | 25000000 | 122.14 Hz | ~15 % drops → ~104 unique fps shown |
 | ~100 Hz (zero-drop fallback) | 20500000 | 100.2 Hz | zero drops at full brightness |
 | True 120 Hz (SI experiment) | 45100000 + vfp=416 | 120.0 Hz | zero drops; PCLK 45 MHz on the ribbon — unverified SI |
 

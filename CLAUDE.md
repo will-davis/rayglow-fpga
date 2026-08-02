@@ -53,15 +53,22 @@ rayglow's `ROADMAP.md` §5, `hardware/POWER-AND-GROUNDING.md`, and
 - **SRAM config is volatile** — after any power cycle, reload the bitstream before
   trusting any test result (a blank FPGA floats its pins and looks like broken wiring).
 - 8 LEDs bank 1 active-low (Table 7.4); SW4 = user button P4 active-low (Table 7.3).
+  What each LED/switch MEANS under the wall bitstream: hardware/SWITCHES-AND-LEDS.md.
 - HUB75 out: J32 (18 GPIO) + J33 (14 GPIO), both bank 7 / VCCIO7 = 3.3 V (JP11 default);
   expansion: Versa J39 (~19) / J40 (~30). Signal plan: hardware/WING-BOARD.md.
 
 ## Current state
-**THE FULL WALL IS LIVE (2026-07-29): all 4 chains, 384×128, rendering rayglow shaders
-over DPI** — Pi 5 (`--output kms`, vsync-paced blits, branch `feat/output-kms`) → JP8 DPI
-→ `top_wall.py` (NUM_CHAINS=4, 20 MHz shift via PLL12to40, 168/208 EBR) → 2× RayGLow
-RP2350 HATs (hardware/RAYGLOW-HAT-ADAPTER.md) → four 6-panel chains. Phases 0–3 done
-(wing boards parked — HATs serve the role). Phase 4 in flight: tearing fixed (vsync);
-flicker re-check pending, overlap upgrade (~102→145 Hz) is the fix if it persists; flash
-boot blocked on JP18 (Flash CS jumper) + SW1 MSPI switches; note the 12 MHz PLL ref needs
-USB plugged — true standalone needs the X2 200 MHz migration.
+**PRODUCTION at 122 Hz (2026-08-02): the full 384×128 wall renders rayglow shaders from
+a 122.14 Hz DPI source** — Pi 5 (`--output kms`, DRM page-flip paced, branch
+`feat/output-kms`) → JP8 DPI (25 MHz PCLK, 384×480-clamped mode, FPGA captures rows
+0–127) → `top_wall.py` (NUM_CHAINS=4, 48 MHz scan / 24 MHz shift, B=11 + MSB subfield
+splits, overlap engine, 168/208 EBR) → 2× RayGLow RP2350 HATs
+(hardware/RAYGLOW-HAT-ADAPTER.md) → four 6-panel chains. The double-buffer handoff is
+skip-gated (INTERFACE-CONTRACT §2a, v0.2): tear-free at any timing ratio; a scan slower
+than the source drops whole frames instead (LED D8). SW5 trades brightness vs refresh vs
+drop rate — default u=8 = 140.4 Hz / ~15 % drops, u=6 = 171.2 Hz / zero drops at 91 %
+brightness; every switch + LED meaning: hardware/SWITCHES-AND-LEDS.md. Phases 0–4 done
+(wing boards parked — HATs serve the role). Still open: flash-boot power-cycle test —
+and after any gateware change, reflash over SSH or a power cycle boots the previous
+flash image; true no-USB standalone needs the X2 200 MHz migration (12 MHz PLL ref is
+USB-fed); optional temporal dithering / per-chain diag counters.
