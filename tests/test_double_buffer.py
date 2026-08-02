@@ -126,3 +126,87 @@ def test_no_tearing_with_distinct_frames():
     torn = [s for s in sweeps if len(s) > 1]
     assert not torn, f"torn sweeps (mixed source frames): {torn[:5]} of {len(sweeps)}"
     assert any(s != {0} for s in sweeps), "reader never saw real frames (test harness bug)"
+
+
+def test_slow_reader_drops_frames_never_tears():
+    """The 120 Hz-DPI regime: reader sweep LONGER than DPI_period - capture_time.
+
+    Here the completion-fired toggle alone is not enough — by the time the reader swaps,
+    the old writer had already started overwriting its front buffer (the constraint the
+    60 Hz mode satisfies and the ~122 Hz modes violate). The skip-gated writer must
+    instead sit out source frames: every sweep still shows exactly ONE source frame,
+    ids only move forward, and the sat-out frames are observable as `skip` pulses and
+    as ids that never reach the panel.
+    """
+    W, S, N = 8, 2, 1
+    H = 2 * S * N
+    FRAMES = 12
+    dut = DoubleBuffer(width=W, scan=S, chains=N)
+    sim = Simulator(dut)
+    sim.add_clock(1e-6, domain="pix")
+    sim.add_clock(0.3e-6, domain="sync")
+    state = {"done": False, "skips": 0}
+    sweeps = []
+
+    async def writer(ctx):
+        for frame in range(1, FRAMES + 1):
+            for y in range(H + 4):                    # H captured + 4 dropped rows
+                for x in range(W):
+                    ctx.set(dut.wr_x, x)
+                    ctx.set(dut.wr_y, y)
+                    ctx.set(dut.wr_pixel, frame)
+                    ctx.set(dut.wr_valid, 1)
+                    ctx.set(dut.wr_frame_start, 1 if (x == 0 and y == 0) else 0)
+                    await ctx.tick("pix")
+                ctx.set(dut.wr_valid, 0)              # hblank
+                ctx.set(dut.wr_frame_start, 0)
+                for _ in range(2):
+                    await ctx.tick("pix")
+            for _ in range(40):                       # vblank / idle gap
+                await ctx.tick("pix")
+        for _ in range(300):                          # idle: let the reader drain
+            await ctx.tick("pix")
+        state["done"] = True
+
+    async def skip_monitor(ctx):
+        while not state["done"]:
+            if ctx.get(dut.skip):
+                state["skips"] += 1
+            await ctx.tick("pix")
+
+    async def reader(ctx):
+        # Dwell 20 (vs 15 in the test above): sweep ~96 us against a 120 us source
+        # period whose capture completes ~42 us in — budget ~78 us, so the reader
+        # misses the handoff window on a steady fraction of frames, as the ~140 Hz
+        # scan does against a ~122 Hz DPI source (7.1 ms sweep vs ~6.1 ms budget).
+        while not state["done"]:
+            seen = set()
+            for addr in range(W * S):
+                ctx.set(dut.rd_addr, addr)
+                for _ in range(20):
+                    await ctx.tick("sync")
+                for h in range(2):
+                    seen.add(ctx.get(dut.rd_data[h]))
+            ctx.set(dut.rd_frame_end, 1)
+            await ctx.tick("sync")
+            ctx.set(dut.rd_frame_end, 0)
+            sweeps.append(seen)
+
+    sim.add_testbench(writer)
+    sim.add_testbench(skip_monitor)
+    sim.add_testbench(reader)
+    sim.run()
+
+    torn = [s for s in sweeps if len(s) > 1]
+    assert not torn, f"torn sweeps (mixed source frames): {torn[:5]} of {len(sweeps)}"
+    shown = [next(iter(s)) for s in sweeps if s and s != {0}]
+    assert shown, "reader never saw real frames (test harness bug)"
+    assert shown == sorted(shown), f"displayed ids went backwards: {shown}"
+    dropped = set(range(1, FRAMES + 1)) - set(shown)
+    assert state["skips"] >= 2, f"skip gate never engaged (skips={state['skips']})"
+    assert dropped, "no source frame was dropped — timing regime not exercised"
+    # Every capture the writer DID make must reach the panel (the end-of-run idle lets
+    # the reader drain), so the only route to a dropped id is a skip pulse: 1:1.
+    assert state["skips"] == len(dropped), (
+        f"skips={state['skips']} vs dropped ids={sorted(dropped)} — a capture was lost"
+    )

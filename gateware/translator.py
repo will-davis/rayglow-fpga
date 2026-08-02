@@ -55,6 +55,8 @@ class DpiToHub75(Elaboratable):
         self.err_short = Signal()   # latch: some line captured SHORT (DE glitch class)
         self.err_long = Signal()    # latch: some line captured LONG (PCLK-ringing class)
         self.err_blink = Signal()   # ~0.4 s pulse per bad line (error-rate visibility)
+        self.skip_blink = Signal()  # stretched pulse per DROPPED source frame (reader
+                                    # behind — expected duty cycle of the 120 Hz modes)
 
     def elaborate(self, platform):
         m = Module()
@@ -73,6 +75,15 @@ class DpiToHub75(Elaboratable):
         m.d.comb += self.err_blink.eq(blink != 0)
         m.submodules.db = db = DoubleBuffer(
             width=self.width, scan=self.scan, chains=self.chains)
+        # Same stretch for dropped source frames (~0.17 s at 25 MHz): dark = the scan is
+        # consuming every source frame; solid = steady dropping (normal at ~122 Hz DPI,
+        # where the handoff budget predicts ~15 % skips — see double_buffer's docstring).
+        skip_stretch = Signal(22)
+        with m.If(db.skip):
+            m.d.pix += skip_stretch.eq(2**22 - 1)
+        with m.Elif(skip_stretch != 0):
+            m.d.pix += skip_stretch.eq(skip_stretch - 1)
+        m.d.comb += self.skip_blink.eq(skip_stretch != 0)
         m.submodules.core = core = Hub75Core(
             width=self.width, scan=self.scan, chains=self.chains, planes=self.planes,
             unit=self._unit_init, unit_max=self.unit_max, guard=self.guard,

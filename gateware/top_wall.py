@@ -103,6 +103,9 @@ class Top(Elaboratable):
             platform.request("led", 6).o.eq(tr.err_long),    # D11: LONG lines = PCLK ringing
             platform.request("led", 5).o.eq(tr.err_short),   # D10: SHORT lines = DE glitches
             platform.request("led", 4).o.eq(tr.err_blink),   # D9: blinks ~0.4s per bad line
+            # D8: source-frame drops (skip-gated handoff). Dark at 60 Hz DPI; at ~122 Hz
+            # the scan can't consume every frame and this sits lit (~15 % drop predicted).
+            platform.request("led", 3).o.eq(tr.skip_blink),
         ]
         return m
 
