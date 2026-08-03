@@ -74,7 +74,11 @@ single-domain design, BCM timing, timing closure.
       14–19 (17 worst) — likely OE/SI; gateware fallback if it survives = blanking-guard
       interval (SCANOUT.md v2). **Parked — physical-layer track, runs parallel to Phase 2.**
 - [x] Gamma LUT (8-bit → B-bit CIE1931) in the scan-out path
-- [ ] Measure refresh vs the table (PicoScope on OE/LAT — both well under 10 MHz)
+- [x] ~~Measure refresh vs the table (PicoScope on OE/LAT)~~ **Superseded 2026-08-03:**
+      refresh is computed from the deterministic FSM and has been confirmed on the wall
+      repeatedly through the production configs (137 → 140.4 → 171.2 Hz at SW5=6, with
+      the cadence/drop tables in SWITCHES-AND-LEDS.md matching observation). A bench
+      scope pass would add nothing the drop-counter LEDs don't already prove.
 
 **Accept:** static + animated ROM patterns on the P6 panel at B≥8, measured refresh
 matching prediction ±10 %, all sims green.
@@ -116,9 +120,13 @@ Concepts: clock-domain crossing, async handshakes, video timing.
 - [x] Refresh (computed, deterministic FSM): bench 64×32 B=10 U=4 guard=8 = 137 Hz @ 12 MHz.
       The **overlap** upgrade (shift-under-display) is the ~2× lever if ever needed
       (SCANOUT.md) — deferred; 137 Hz is already flicker-free.
-- [ ] **Open: driver clamps `vactive` to 480** (asked 128, got 384×480 @ 16.8 Hz). Fine
-      for the crop; the wall needs true 384×128. Investigate the RP1-DPI/KMS minimum-height
-      path (panel-simple bridge / custom mode) before Phase 3.
+- [x] **RESOLVED as won't-fix (2026-08-03): driver clamps `vactive` to 480.** The
+      as-built 384×480 mode is ratified in contract §2a — the FPGA crops rows 0–127,
+      and the short capture window (2.13 ms of the 8.19 ms frame) is what makes the
+      skip-gated handoff's drop math comfortable. The clamp even donates a free
+      side-channel: rows 128–479 are transmitted and discarded (candidate carrier for
+      runtime brightness — Phase 4). A true-128 mode only matters for the padded
+      45 MHz true-120 Hz SI experiment, which remains parked on its own merits.
 - [x] **rayglow `--output kms` IMPLEMENTED (2026-07-21, branch `feat/output-kms`).**
       `kms_out.py` mmaps /dev/fb0 + blits the resolved RGB frame; `run_kms` mirrors the
       live loop minus fold/pack/transport; forces resolve gamma=1.0 (FPGA owns gamma).
@@ -140,7 +148,11 @@ Concepts: clock-domain crossing, async handshakes, video timing.
       clean) — dropped to 20 MHz shift and it cleared. `PLL12to30` (15 MHz) staged if a
       longer/faster chain ever needs it. **This validates the parametric engine + PLL for
       the Phase 3 wall.**
-- [ ] Cross-check: rayglow dry-run GIF vs FPGA-sim golden model on the same frame
+- [x] ~~Cross-check: rayglow dry-run GIF vs FPGA-sim golden model~~ **Superseded
+      2026-07-30 by stronger evidence:** the armed line-integrity checkers (D9–D11
+      dark indefinitely) plus the flawless long-exposure photo prove the real data
+      path bit-clean end to end on the wall — a sim cross-check is weaker than what
+      already passed.
 
 **Accept:** a rayglow shader at 60 fps on bench panel(s) over DPI, no tearing, gamma per
 contract; RP2350 path still fully operational.
@@ -166,9 +178,10 @@ SKiDL flow proven on the rayglow HAT).
       wiring map + power/ground in **hardware/RAYGLOW-HAT-ADAPTER.md**. `top_wall.py`
       (NUM_CHAINS 2→4). Custom wing boards (WING-BOARD.md) come AFTER the wall is proven —
       their only edge over the HAT is data-line series termination (higher shift clock).
-- [ ] **Stage 1: 1 HAT, 2 chains (384×64).** `top_wall.py` NUM_CHAINS=2 built (scan Fmax
-      79 MHz, 72 EBR). Re-cable top 2 rows as two 6-panel chains; wire per the adapter doc;
-      Pi renders 384×64. Validates the RayGLow-HAT interfacing + multi-chain scan-out.
+- [x] ~~**Stage 1: 1 HAT, 2 chains (384×64).**~~ **SKIPPED (intentionally, 2026-08-03
+      marking):** bring-up went straight to Stage 2's four chains and succeeded; the
+      NUM_CHAINS=2 build (scan Fmax 79 MHz, 72 EBR) remains in the repo if a staged
+      diagnosis is ever needed, but the intermediate validation step is moot.
 - [x] **Stage 2 bitstream BUILT + fits (2026-07-22).** `top_wall.py` NUM_CHAINS=4:
       168/208 EBR (80% = 144 framebuffer + 24 gamma ROMs), 1 PLL, both clocks pass timing
       (scan ~68-83 MHz vs 40). The full 384×128 wall is proven buildable on the 85F.
@@ -188,11 +201,15 @@ SKiDL flow proven on the rayglow HAT).
       design record.)
 - [ ] Power: '245 VCC ratiometric from each chain's panel-PSU domain; star ground per
       rayglow POWER-AND-GROUNDING.md; wall split on the horizontal midline (PSU per 2 rows)
-- [ ] SI validation at 25 MHz, series-R experiments (footprints on the wing board). Honest
-      note: the 10 MHz PicoScope can't see these edges — mitigate with conservative
-      clocking + the sim; the manifest's "used ≥100 MHz scope" gap applies here
+- [x] **SI validation DONE as measured (2026-08-01):** the shift-clock cliff is pinned —
+      24 MHz clean end to end, 30 MHz cascades skew from ~panel 3 on all chains, FAST
+      vs SLOW slew indistinguishable (head-end timing budget, not edge rate). Going
+      faster is interconnect work — the terminated-HAT/mezzanine track Will is already
+      running as its own project. Series-R experiments fold into that board.
 - [ ] Full wall soak: worst-case patterns (all-white capped, single-pixel, high-frequency
-      dither), thermal check on the '245s
+      dither), thermal check on the '245s. *(Partial 2026-08-03: a 31-min remote-render
+      soak at 122 Hz ran clean — zero drops, D8 dark — but that was live-content, not
+      worst-case patterns; the pattern sweep + thermal check remain.)*
 
 **Accept:** full 384×128 wall from the Pi desktop at 60 fps input, ≥400 Hz refresh @ B≥8,
 stable for hours, no visible SI artifacts at viewing distance.
@@ -291,6 +308,17 @@ stable for hours, no visible SI artifacts at viewing distance.
       Fmax 85.6 MHz). ⚠ Until the new bitstream is in SPI flash, keep in mind a power
       cycle boots the OLD gateware into the 25 MHz mode → 16-row mixing returns until
       reflash (`openFPGALoader -b ecp5_evn -f --unprotect-flash`).
+- [x] **Remote render accepted on the wall (2026-08-03) with ZERO gateware changes** —
+      rayglow renders on ubuntu-server's RTX 4080 and ships frames to the Pi's
+      framesink; this repo's boundary held exactly as specified. Contract bumped to
+      **v0.3** (host-agnostic clarification, doc-only).
+- [ ] **Runtime brightness from the render host — discarded-rows side-band.** The
+      vactive=480 clamp means rows 128–479 cross the ribbon and are dropped: a free
+      control channel. Stamp a magic + `unit` value into row 128; gateware reads it
+      during the discard sweep and drives the existing runtime `unit` port (SW5
+      becomes the manual override). Replaces walking to the wall, enables
+      content-adaptive dimming from the renderer (the parked rayglow ROADMAP §1 need,
+      re-homed to the DPI path). Design sketch only — not committed work.
 - [ ] Optional: temporal dithering; per-chain diagnostics counters readable over the
       debug UART/I²C
 

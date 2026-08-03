@@ -11,6 +11,15 @@ changes bump the version and are noted in both repos' status logs. Items marked
 tear-free at ANY modeline; a scan too slow for the source drops whole source frames
 instead (EVN LED D8 lights per drop; hardware/SWITCHES-AND-LEDS.md).
 
+**v0.3 (2026-08-03, doc-only).** The contract is **host-agnostic**: it specifies DPI
+signals and timing at the Pi↔FPGA boundary and says nothing about which machine
+computes the pixels. Proven in practice: rayglow's remote render (GLSL on
+ubuntu-server's RTX 4080 → frames over UDP → `rayglow.framesink` page-flipping the
+same DPI CRTC; rayglow REMOTE-RENDER-PLAN.md, accepted on the wall 2026-08-03)
+shipped with **zero changes to this repo** — the FPGA was specified as a monitor,
+and a monitor does not care which machine is driving it. §5 updated to name the
+render host explicitly. No signal, timing, or gateware change.
+
 ## 1. Physical link
 - Pi 5 40-pin header ↔ ECP5-EVN **JP8**, short 40-pin ribbon (all 28 GPIOs land in FPGA
   bank 3, 3.3 V — UG Table 5.7). No power sharing: Pi, EVN (12 V), and wall PSUs are
@@ -99,7 +108,11 @@ on the panel in order. So `pixel_in[23:16]=R, [15:8]=G, [7:0]=B` (data lines D0.
 GPIO4..27 straight through). rgb888, not bgr888.
 
 ## 5. Out of scope (explicitly)
-- Audio/feature packets (UDP :5005) and the control plane (TCP :5006) terminate at the Pi
-  renderer, exactly as today. The FPGA sees only video.
+- Audio/feature packets (UDP :5005) and the control plane (TCP :5006) terminate at the
+  **render host** — the Pi when rendering locally (`--output kms`), ubuntu-server under
+  remote render (production since 2026-08-03; the Pi then runs `rayglow.framesink` and
+  the frame link adds UDP :5007, all rayglow-side). Either way the FPGA sees only video
+  on JP8.
 - The RP2350 4-lane PIO link contract (rayglow CLAUDE.md) is unchanged and remains the
-  fallback transport; nothing here supersedes it.
+  documented fallback transport; nothing here supersedes it. (Honest caveat from the
+  rayglow ROADMAP: that fallback was never validated at wall-v2 chain depth.)
